@@ -107,9 +107,6 @@ var runEpisode = function (malSeries, malEpisode, kissanimeEpisode, next) {
   var bestVideo = getBestVideo(kissanimeEpisode);
   var directory = config.outputDirectory;
   var finalDirectory = config.finalDirectory + '/' + sanitise(malSeries.title);
-
-  debug('Downloading ' + kissanimeEpisode.name + ' (' + bestVideo.resolution + 'p)');
-
   var kissanimeEpisodeNumber = kissanimeEpisode.name.match(/Episode ([0-9]+)/)[1];
   var episodeName = 'Episode ' + kissanimeEpisodeNumber;
   var synopsis = '';
@@ -121,11 +118,13 @@ var runEpisode = function (malSeries, malEpisode, kissanimeEpisode, next) {
     genre = malSeries.genres[0];
   }
 
-  var fileName = directory + '/' + sanitise(episodeName) + ".mp4";
-  var finalFileName = finalDirectory + '/' + sanitise('Episode ' + kissanimeEpisodeNumber) + ".mp4";
-
+  var episodeFileName = sanitise(kissanimeEpisodeNumber + ". " + episodeName);
+  var fileName = directory + '/' + episodeFileName + ".mp4";
+  var finalFileName = finalDirectory + '/' + episodeFileName + ".mp4";
   var malAired = malSeries.aired.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]{2}), ([0-9]{4})/);
   var malYear = malAired[3];
+
+  debug('Downloading ' + kissanimeEpisode.name + ' (' + bestVideo.resolution + 'p) to ' + finalFileName);
 
   if (fs.existsSync(fileName) || fs.existsSync(finalFileName)) {
     next();
@@ -154,6 +153,8 @@ var runEpisode = function (malSeries, malEpisode, kissanimeEpisode, next) {
         malYear,
         '--longdesc',
         synopsis,
+        '--title',
+        episodeName,
       ];
       var cmd = shellescape(args);
       exec(cmd, error => {
