@@ -12,16 +12,21 @@ var cheerio = require('cheerio');
 var exec = require('child_process').exec;
 var fs = require('fs');
 var mkdirp = require('mkdirp');
+var pad = require('pad');
 var progress = require('request-progress');
 var request = require('request');
-var sanitise = require('sanitize-filename');
 var shellescape = require('shell-escape');
 var util = require('util');
 
-const debug = require('debug')('kissanime');
+const debug = require('debug')('kissmal');
 
 var provider = '9anime.to';
 // var provider = 'kissanime.to';
+
+String.prototype.replaceAll = function (search, replacement) {
+  var target = this;
+  return target.replace(new RegExp(search, 'g'), replacement);
+};
 
 var cachedRequest = (url, callback) => {
   var cacheFile = 'cache/' + new Buffer(url).toString('base64');
@@ -40,6 +45,20 @@ var cachedRequest = (url, callback) => {
   });
 };
 
+var sanitise = string => {
+  //noinspection JSUnresolvedFunction
+  return string.replaceAll('"', '_').replaceAll(':', '_');
+};
+
+var getFileName = (malEpisode) => {
+  return config.outputDirectory + '/' + pad(2, malEpisode.number, '0') + ' ' + sanitise(malEpisode.name) + '.mp4';
+};
+
+var getFinalFileName = (malEpisode, malSeries) => {
+  var directory = config.finalDirectory + '/' + sanitise(malSeries.title);
+  return directory + '/' + pad(2, malEpisode.number, '0') + ' ' + sanitise(malEpisode.name) + '.mp4';
+};
+
 var runSeries = function (series, nextSeries) {
   var seriesId = series.id;
   var cacheFile = "cache/" + seriesId + ".json";
@@ -51,7 +70,6 @@ var runSeries = function (series, nextSeries) {
     var mtime = new Date(util.inspect(stat.mtime));
     var yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
     if (mtime > yesterday) {
-      debug('Reading from cache file: ' + cacheFile);
       var cacheObject = require('./cache/' + seriesId);
       var malSeries = cacheObject.malSeries;
       var malEpisodeInformations = cacheObject.malEpisodeInformations;
@@ -78,7 +96,7 @@ var runSeries = function (series, nextSeries) {
   }
 
   MyAnimeList.fromId(seriesId).then(function (malSeries) {
-    debug('Fetching series ' + malSeries.title);
+    console.log('Fetching series ' + malSeries.title);
 
     var titles = [];
 
@@ -102,8 +120,6 @@ var runSeries = function (series, nextSeries) {
           var cacheFile = "cache/" + malSeries.id + ".json";
           var cacheObject = {malSeries, malEpisodeInformations};
           fs.writeFileSync(cacheFile, JSON.stringify(cacheObject));
-          debug('Wrote cache file ' + cacheFile);
-
           if (provider === 'kissanime.to') {
             runSeriesKissanime(title, malSeries, malEpisodeInformations, nextTitle, nextSeries)
           } else {
@@ -127,7 +143,7 @@ var runSeriesKissanime = (title, malSeries, malEpisodeInformations, nextTitle, n
   }
 
   if (url === null) {
-    debug('Could not find URL for ' + title + ' on kissanime.to');
+    console.error('Could not find URL for ' + title + ' on kissanime.to');
     nextSeries();
     return;
   }
@@ -191,9 +207,8 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
                 }
               }
 
-              var finalDirectory = config.finalDirectory + '/' + sanitise(malSeries.title);
-              var fileName = directory + '/' + sanitise(malEpisodeInformation.name) + ".mp4";
-              var finalFileName = finalDirectory + '/' + sanitise(malEpisodeInformation.name) + ".mp4";
+              var fileName = getFileName(malEpisodeInformation);
+              var finalFileName = getFinalFileName(malEpisodeInformation, malSeries);
 
               if (fs.existsSync(fileName) || fs.existsSync(finalFileName)) {
                 nextEpisode();
@@ -228,26 +243,34 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
   );
 };
 
-var downloadEpisode = function (malSeries, malEpisode, bestVideo, next) {
-  var directory = config.outputDirectory;
-  var finalDirectory = config.finalDirectory + '/' + sanitise(malSeries.title);
-  var episodeName = 'Episode ' + malEpisode.number;
+var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, next) {
+  var episodeName = 'Episode ' + mapEpisodeInformation.number;
   var synopsis = '';
   var genre = '';
+  var contentRating = '';
 
-  if (malEpisode !== null) {
-    episodeName = malEpisode.name;
-    synopsis = malEpisode.synopsis;
+  if (mapEpisodeInformation !== null) {
+    episodeName = mapEpisodeInformation.name;
+    synopsis = mapEpisodeInformation.synopsis;
     genre = malSeries.genres[0];
   }
 
-  var fileName = directory + '/' + sanitise(episodeName) + ".mp4";
-  var finalFileName = finalDirectory + '/' + sanitise(episodeName) + ".mp4";
+  switch (malSeries.classification) {
+    case "PG-13 - Teens 13 or older":
+      contentRating = "PG-13";
+      break;
+    default:
+      throw new Error('Unrecognised classification: ' + malSeries.classification);
+  }
+
   var malAired = malSeries.aired.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]{2}), ([0-9]{4})/);
   var malYear = malAired[3];
 
-  debug('Downloading ' + malEpisode.number + ' - ' + malEpisode.name + ' (' + bestVideo.resolution + 'p) to '
-    + finalFileName);
+  var fileName = getFileName(mapEpisodeInformation);
+  var finalFileName = getFinalFileName(mapEpisodeInformation, malSeries);
+
+  console.log('Downloading ' + mapEpisodeInformation.number + ' - ' + mapEpisodeInformation.name + ' (' +
+    bestVideo.resolution + 'p) to ' + finalFileName);
 
   if (fs.existsSync(fileName) || fs.existsSync(finalFileName)) {
     next();
@@ -269,15 +292,21 @@ var downloadEpisode = function (malSeries, malEpisode, bestVideo, next) {
         '--TVShowName',
         malSeries.title,
         '--TVEpisodeNum',
-        malEpisode.number,
+        mapEpisodeInformation.number,
         '--artwork',
         'temp.jpg',
         '--year',
         malYear,
         '--longdesc',
         synopsis,
+        '--storedesc',
+        malSeries.synopsis,
         '--title',
         episodeName,
+        '--tracknum',
+        mapEpisodeInformation.number + '/' + malSeries.episodes,
+        '--contentRating',
+        contentRating
       ];
       var cmd = shellescape(args);
       exec(cmd, error => {
@@ -288,6 +317,7 @@ var downloadEpisode = function (malSeries, malEpisode, bestVideo, next) {
           return;
         }
         fs.renameSync('temp.mp4', fileName);
+        console.log("");
         next();
       });
     });
@@ -371,4 +401,3 @@ async.eachSeries(config.series, runSeries);
  var cacheFile = "cache/search.json";
  fs.writeFileSync(cacheFile, JSON.stringify(results));
  }); */
-
