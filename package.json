@@ -7,10 +7,11 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
-  "license": "ISC",
+  "license": "GPL",
   "dependencies": {
     "anime-scraper": "^2.1.2",
     "async": "^2.0.1",
+    "cheerio": "^0.22.0",
     "debug": "^2.2.0",
     "malapi": "0.0.1",
     "mkdirp": "^0.5.1",
