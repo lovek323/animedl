@@ -2,6 +2,7 @@
 
 var Kissanime = require('anime-scraper').Anime;
 var MyAnimeList = require('malapi').Anime;
+var ProgressBar = require('progress');
 
 var config = require('./config.json');
 var kissanimeSeries = require('./cache/search.json');
@@ -11,6 +12,7 @@ var cheerio = require('cheerio');
 var exec = require('child_process').exec;
 var fs = require('fs');
 var mkdirp = require('mkdirp');
+var progress = require('request-progress');
 var request = require('request');
 var sanitise = require('sanitize-filename');
 var shellescape = require('shell-escape');
@@ -23,18 +25,15 @@ var provider = '9anime.to';
 
 var cachedRequest = (url, callback) => {
   var cacheFile = 'cache/' + new Buffer(url).toString('base64');
-  debug(cacheFile);
   if (fs.existsSync(cacheFile)) {
     var stat = fs.statSync(cacheFile);
     var mtime = new Date(util.inspect(stat.mtime));
     var yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
     if (mtime > yesterday) {
-      debug('Reading from cache file: ' + cacheFile);
       callback(null, null, fs.readFileSync(cacheFile));
       return;
     }
   }
-  debug('Downloading ' + url);
   request(url, (error, request, body) => {
     fs.writeFileSync(cacheFile, body);
     callback(error, request, body);
@@ -179,8 +178,28 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
               }
               episodes[name].push(id);
             });
+
             async.eachSeries(Object.keys(episodes), (episode, nextEpisode) => {
               var episodeId = episodes[episode][0];
+              var episodeNumber = parseInt(episode.match(/^([0-9]+)/)[1]);
+              var malEpisodeInformation = null;
+
+              for (var i = 0; i < malEpisodeInformations.length; i++) {
+                if (malEpisodeInformations[i].number == episodeNumber) {
+                  malEpisodeInformation = malEpisodeInformations[i];
+                  break;
+                }
+              }
+
+              var finalDirectory = config.finalDirectory + '/' + sanitise(malSeries.title);
+              var fileName = directory + '/' + sanitise(malEpisodeInformation.name) + ".mp4";
+              var finalFileName = finalDirectory + '/' + sanitise(malEpisodeInformation.name) + ".mp4";
+
+              if (fs.existsSync(fileName) || fs.existsSync(finalFileName)) {
+                nextEpisode();
+                return;
+              }
+
               request(
                 'http://9anime.to/ajax/episode/info?id=' + episodeId + '&update=0&film=' + filmId,
                 (error, response, body) => {
@@ -191,15 +210,6 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
 
                   request(url, (error, response, body) => {
                     body = JSON.parse(body);
-                    var episodeNumber = parseInt(episode.match(/^([0-9]+)/)[1]);
-                    var malEpisodeInformation = null;
-
-                    for (var i = 0; i < malEpisodeInformations.length; i++) {
-                      if (malEpisodeInformations[i].number == episodeNumber) {
-                        malEpisodeInformation = malEpisodeInformations[i];
-                        break;
-                      }
-                    }
 
                     return downloadEpisode(
                       malSeries,
@@ -210,11 +220,10 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
                   });
                 }
               )
-            });
+            }, nextSeries);
           });
         }
       });
-      nextSeries();
     }
   );
 };
@@ -283,7 +292,11 @@ var downloadEpisode = function (malSeries, malEpisode, bestVideo, next) {
       });
     });
     //noinspection JSUnresolvedFunction
-    request({url: bestVideo.url, method: 'GET', followAllRedirects: true}).pipe(mp4File);
+    var bar = new ProgressBar(':bar :elapseds elapsed :percent :etas remaining', {total: 100});
+    //noinspection JSUnresolvedFunction
+    progress(request({url: bestVideo.url, method: 'GET', followAllRedirects: true}))
+      .on('progress', state => bar.update(state.percentage))
+      .pipe(mp4File);
   });
   //noinspection JSUnresolvedFunction
   request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
