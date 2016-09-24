@@ -50,13 +50,13 @@ var sanitise = string => {
   return string.replaceAll('"', '_').replaceAll(':', '_');
 };
 
-var getFileName = (malEpisode) => {
-  return config.outputDirectory + '/' + pad(2, malEpisode.number, '0') + ' ' + sanitise(malEpisode.name) + '.mp4';
+var getFileName = () => {
+  return config.outputDirectory + '/episode.mp4';
 };
 
-var getFinalFileName = (malEpisode, malSeries) => {
-  var directory = config.finalDirectory + '/' + sanitise(malSeries.title);
-  return directory + '/' + pad(2, malEpisode.number, '0') + ' ' + sanitise(malEpisode.name) + '.mp4';
+var getFinalFileName = (malEpisode, malSeries, episodeName) => {
+  return config.finalDirectory + '/' + sanitise(malSeries.title) + '/' + pad(2, malEpisode.number, '0') + ' ' +
+    sanitise(episodeName) + '.mp4';
 };
 
 var runSeries = function (series, nextSeries) {
@@ -74,64 +74,47 @@ var runSeries = function (series, nextSeries) {
       var malSeries = cacheObject.malSeries;
       var malEpisodeInformations = cacheObject.malEpisodeInformations;
 
-      var titles = [];
-
-      if (typeof config.seriesNameOverrides[seriesId] !== 'undefined') {
-        titles = [config.seriesNameOverrides[seriesId]];
+      if (provider === 'kissanime.to') {
+        //noinspection JSUnresolvedVariable
+        runSeriesKissanime(series.kissanimeTitle, malSeries, malEpisodeInformations, nextSeries)
       } else {
-        titles = [malSeries.title];
-        titles = titles.concat(malSeries.alternativeTitles.english);
-        titles = titles.concat(malSeries.alternativeTitles.synoynms)
+        //noinspection JSUnresolvedVariable
+        runSeries9Anime(series._9AnimeTitle, malSeries, malEpisodeInformations, nextSeries)
       }
-
-      async.eachSeries(titles, (title, nextTitle) => {
-        if (provider === 'kissanime.to') {
-          runSeriesKissanime(title, malSeries, malEpisodeInformations, nextTitle, nextSeries)
-        } else {
-          runSeries9Anime(title, malSeries, malEpisodeInformations, nextTitle, nextSeries)
-        }
-      }, nextSeries);
     }
     return;
   }
 
   MyAnimeList.fromId(seriesId).then(function (malSeries) {
-    console.log('Fetching series ' + malSeries.title);
-
-    var titles = [];
-
-    if (typeof config.seriesNameOverrides[seriesId] !== 'undefined') {
-      titles = [config.seriesNameOverrides[seriesId]];
-    } else {
-      titles = [malSeries.title];
-      titles = titles.concat(malSeries.alternativeTitles.english);
-      titles = titles.concat(malSeries.alternativeTitles.synoynms)
-    }
+    console.log('Fetching series ' + seriesId);
 
     malSeries.getEpisodes().then(malEpisodes => {
-      async.eachSeries(titles, (title, nextTitle) => {
-        var malEpisodeInformations = [];
-        async.eachSeries(malEpisodes, (malEpisode, nextMalEpisode) => {
-          malEpisode.getInformation().then(malEpisodeInformation => {
-            malEpisodeInformations.push(malEpisodeInformation);
-            nextMalEpisode();
-          });
-        }, () => {
-          var cacheFile = "cache/" + malSeries.id + ".json";
-          var cacheObject = {malSeries, malEpisodeInformations};
-          fs.writeFileSync(cacheFile, JSON.stringify(cacheObject));
-          if (provider === 'kissanime.to') {
-            runSeriesKissanime(title, malSeries, malEpisodeInformations, nextTitle, nextSeries)
-          } else {
-            runSeries9Anime(title, malSeries, malEpisodeInformations, nextTitle, nextSeries)
-          }
+      var malEpisodeInformations = [];
+      async.eachSeries(malEpisodes, (malEpisode, nextMalEpisode) => {
+        malEpisode.getInformation().then(malEpisodeInformation => {
+          malEpisodeInformations.push(malEpisodeInformation);
+          nextMalEpisode();
         });
+      }, () => {
+        var cacheFile = "cache/" + malSeries.id + ".json";
+        var cacheObject = {malSeries, malEpisodeInformations};
+        fs.writeFileSync(cacheFile, JSON.stringify(cacheObject));
+
+        if (provider === 'kissanime.to') {
+          //noinspection JSUnresolvedVariable
+          runSeriesKissanime(series.kissanimeTitle, malSeries, malEpisodeInformations, nextSeries)
+        } else {
+          //noinspection JSUnresolvedVariable
+          runSeries9Anime(series._9AnimeTitle, malSeries, malEpisodeInformations, nextSeries)
+        }
       });
     });
   });
 };
 
-var runSeriesKissanime = (title, malSeries, malEpisodeInformations, nextTitle, nextSeries) => {
+var runSeriesKissanime = (title, malSeries, malEpisodeInformations, nextSeries) => {
+  console.log('Fetching series ' + title);
+
   var url = null;
 
   //noinspection JSUnresolvedVariable
@@ -172,7 +155,9 @@ var runSeriesKissanime = (title, malSeries, malEpisodeInformations, nextTitle, n
   });
 };
 
-var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, nextSeries) => {
+var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => {
+  console.log('Fetching series ' + title);
+
   cachedRequest(
     'http://9anime.to/ajax/film/search?sort=year%3Adesc&keyword=' + encodeURIComponent(title),
     (error, response, body) => {
@@ -199,6 +184,7 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
               var episodeId = episodes[episode][0];
               var episodeNumber = parseInt(episode.match(/^([0-9]+)/)[1]);
               var malEpisodeInformation = null;
+              var episodeName = 'Episode ' + pad(3, episodeNumber, '0');
 
               for (var i = 0; i < malEpisodeInformations.length; i++) {
                 if (malEpisodeInformations[i].number == episodeNumber) {
@@ -207,8 +193,12 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
                 }
               }
 
-              var fileName = getFileName(malEpisodeInformation);
-              var finalFileName = getFinalFileName(malEpisodeInformation, malSeries);
+              if (malEpisodeInformation !== null) {
+                episodeName = malEpisodeInformation.name;
+              }
+
+              var fileName = getFileName();
+              var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, episodeName);
 
               if (fs.existsSync(fileName) || fs.existsSync(finalFileName)) {
                 nextEpisode();
@@ -244,7 +234,7 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextTitle, next
 };
 
 var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, next) {
-  var episodeName = 'Episode ' + mapEpisodeInformation.number;
+  var episodeName = 'Episode ' + pad(3, mapEpisodeInformation.number, '0');
   var synopsis = '';
   var genre = '';
   var contentRating = '';
@@ -259,6 +249,9 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
     case "PG-13 - Teens 13 or older":
       contentRating = "PG-13";
       break;
+    case "R - 17+ (violence & profanity)":
+      contentRating = "R";
+      break;
     default:
       throw new Error('Unrecognised classification: ' + malSeries.classification);
   }
@@ -266,7 +259,7 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
   var malAired = malSeries.aired.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]{2}), ([0-9]{4})/);
   var malYear = malAired[3];
 
-  var fileName = getFileName(mapEpisodeInformation);
+  var fileName = getFileName();
   var finalFileName = getFinalFileName(mapEpisodeInformation, malSeries);
 
   console.log('Downloading ' + mapEpisodeInformation.number + ' - ' + mapEpisodeInformation.name + ' (' +
