@@ -24,11 +24,11 @@ npm install
 Run the tool:
 
 ```
-DEBUG="kissanime" node main.js
+node main.js
 ```
 
 ## Debugging
 
 ```
-DEBUG="kissanime,malapi:anime" node main.js
+DEBUG="animedl,malapi:anime" node main.js
 ```

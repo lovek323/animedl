@@ -18,7 +18,7 @@ var request = require('request');
 var shellescape = require('shell-escape');
 var util = require('util');
 
-const debug = require('debug')('kissmal');
+const debug = require('debug')('animedl');
 
 var provider = '9anime.to';
 // var provider = 'kissanime.to';
@@ -206,19 +206,8 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
 
               request(
                 'http://9anime.to/ajax/episode/info?id=' + episodeId + '&update=0&film=' + filmId,
-                (error, response, body) => {
-                  body = JSON.parse(body);
-                  //noinspection JSUnresolvedVariable
-                  var url = body.grabber + '?id=' + episodeId + '&token=' + body.params.token + '&options=' +
-                    body.params.options + '&mobile=0';
-
-                  request(url, (error, response, body) => downloadEpisode(
-                    malSeries,
-                    malEpisodeInformation,
-                    getBestVideoFrom9AnimeEpisode(JSON.parse(body)),
-                    nextEpisode
-                  ));
-                }
+                (error, response, body) =>
+                  process9AnimeEpisodeInfo(error, response, body, episodeId, malSeries, malEpisodeInformation, nextEpisode)
               )
             }, nextSeries);
           });
@@ -226,6 +215,53 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
       });
     }
   );
+};
+
+var process9AnimeEpisodeInfo = (error, response, body, episodeId, malSeries, malEpisodeInformation, nextEpisode) => {
+  try {
+    body = JSON.parse(body);
+  } catch (error) {
+    if (error.contains('The web server reported a gateway time-out error.')) {
+      debug('Gateway time-out error. Waiting 5 seconds.');
+      setTimeout(() => process9AnimeEpisodeInfo(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
+      return;
+    }
+
+    console.error(body);
+    console.error(error);
+    process.exit(1);
+  }
+
+  //noinspection JSUnresolvedVariable
+  var url = body.grabber + '?id=' + episodeId + '&token=' + body.params.token + '&options=' +
+    body.params.options + '&mobile=0';
+
+  request(url, (error, response, body) =>
+    process9AnimeGrabberResponse(error, response, body, malSeries, malEpisodeInformation, nextEpisode));
+};
+
+var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisodeInformation, nextEpisode) => {
+  try {
+    body = JSON.parse(body);
+  } catch (error) {
+    if (error.contains('The web server reported a gateway time-out error.')) {
+      debug('Gateway time-out error. Waiting 5 seconds.');
+      setTimeout(() =>
+        process9AnimeGrabberResponse(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
+      return;
+    }
+
+    console.error(body);
+    console.error(error);
+    process.exit(1);
+  }
+
+  return downloadEpisode(
+    malSeries,
+    malEpisodeInformation,
+    getBestVideoFrom9AnimeEpisode(body),
+    nextEpisode
+  )
 };
 
 var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, next) {

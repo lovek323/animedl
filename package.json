@@ -19,7 +19,6 @@
     "progress": "^1.1.8",
     "request": "^2.75.0",
     "request-progress": "^2.0.1",
-    "sanitize-filename": "^1.6.0",
     "shell-escape": "^0.2.0"
   }
 }
