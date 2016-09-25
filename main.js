@@ -11,7 +11,7 @@ var async = require('async');
 var cheerio = require('cheerio');
 var exec = require('child_process').exec;
 var fs = require('fs');
-var mkdirp = require('mkdirp');
+var numeral = require('numeral');
 var pad = require('pad');
 var progress = require('request-progress');
 var request = require('request');
@@ -54,8 +54,8 @@ var getFileName = () => {
   return config.outputDirectory + '/episode.mp4';
 };
 
-var getFinalFileName = (malEpisode, malSeries, episodeName) => {
-  return config.finalDirectory + '/' + sanitise(malSeries.title) + '/' + pad(2, malEpisode.number, '0') + ' ' +
+var getFinalFileName = (malEpisodeInformation, malSeries, episodeName) => {
+  return config.finalDirectory + '/' + sanitise(malSeries.title) + '/' + pad(2, malEpisodeInformation.number, '0') + ' ' +
     sanitise(episodeName) + '.mp4';
 };
 
@@ -197,10 +197,9 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
                 episodeName = malEpisodeInformation.name;
               }
 
-              var fileName = getFileName();
               var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, episodeName);
 
-              if (fs.existsSync(fileName) || fs.existsSync(finalFileName)) {
+              if (fs.existsSync(finalFileName)) {
                 nextEpisode();
                 return;
               }
@@ -213,16 +212,12 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
                   var url = body.grabber + '?id=' + episodeId + '&token=' + body.params.token + '&options=' +
                     body.params.options + '&mobile=0';
 
-                  request(url, (error, response, body) => {
-                    body = JSON.parse(body);
-
-                    return downloadEpisode(
-                      malSeries,
-                      malEpisodeInformation,
-                      getBestVideoFrom9AnimeEpisode(body),
-                      nextEpisode
-                    );
-                  });
+                  request(url, (error, response, body) => downloadEpisode(
+                    malSeries,
+                    malEpisodeInformation,
+                    getBestVideoFrom9AnimeEpisode(JSON.parse(body)),
+                    nextEpisode
+                  ));
                 }
               )
             }, nextSeries);
@@ -260,20 +255,20 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
   var malYear = malAired[3];
 
   var fileName = getFileName();
-  var finalFileName = getFinalFileName(mapEpisodeInformation, malSeries);
+  var finalFileName = getFinalFileName(mapEpisodeInformation, malSeries, episodeName);
 
   console.log('Downloading ' + mapEpisodeInformation.number + ' - ' + mapEpisodeInformation.name + ' (' +
     bestVideo.resolution + 'p) to ' + finalFileName);
 
-  if (fs.existsSync(fileName) || fs.existsSync(finalFileName)) {
+  if (fs.existsSync(finalFileName)) {
     next();
     return;
   }
 
   var jpgFile = fs.createWriteStream('temp.jpg');
-  jpgFile.on('finish', function () {
+  jpgFile.on('finish', () => {
     var mp4File = fs.createWriteStream('temp.mp4');
-    mp4File.on('finish', function () {
+    mp4File.on('finish', () => {
       var args = [
         'AtomicParsley',
         'temp.mp4',
@@ -301,26 +296,51 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
         '--contentRating',
         contentRating
       ];
+
       var cmd = shellescape(args);
       exec(cmd, error => {
         if (error) {
+          console.log(error);
           debug(error);
-          fs.unlinkSync("cache/" + malSeries.id + ".json");
+          fs.unlinkSync('cache/' + malSeries.id + '.json');
           process.exit(1);
           return;
         }
+
         fs.renameSync('temp.mp4', fileName);
-        console.log("");
+        console.log('');
         next();
       });
     });
+
     //noinspection JSUnresolvedFunction
-    var bar = new ProgressBar(':bar :elapseds elapsed :percent :etas remaining', {total: 100});
+    var bar = new ProgressBar(
+      '[:bar] :bytesTransferred/:bytesTotal :percent :speed/s :remainingTime remaining',
+      {
+        bytesTransferred: '',
+        bytesTotal: '',
+        remainingTime: '',
+        speed: '',
+        total: 100
+      }
+    );
     //noinspection JSUnresolvedFunction
     progress(request({url: bestVideo.url, method: 'GET', followAllRedirects: true}))
-      .on('progress', state => bar.update(state.percentage))
+      .on(
+        'progress',
+        state => bar.update(
+          state.percentage,
+          {
+            bytesTransferred: numeral(state.size.transferred).format('0b'),
+            bytesTotal: numeral(state.size.total).format('0b'),
+            remainingTime: numeral(state.time.remaining).format('00:00:00'),
+            speed: numeral(state.speed).format('0b')
+          }
+        )
+      )
       .pipe(mp4File);
   });
+
   //noinspection JSUnresolvedFunction
   request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
 };
