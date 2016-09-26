@@ -200,6 +200,7 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
               var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, episodeName);
 
               if (fs.existsSync(finalFileName)) {
+                debug('Skipping episode ' + malEpisodeInformation.number);
                 nextEpisode();
                 return;
               }
@@ -335,7 +336,9 @@ var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, nex
         '--tracknum',
         malEpisodeInformation.number + '/' + malSeries.episodes,
         '--contentRating',
-        contentRating
+        contentRating,
+        '--grouping',
+        malSeries.type
       ];
 
       var cmd = shellescape(args);
