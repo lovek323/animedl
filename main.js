@@ -81,8 +81,8 @@ var runSeries = function (series, nextSeries) {
         //noinspection JSUnresolvedVariable
         runSeries9Anime(series._9AnimeTitle, malSeries, malEpisodeInformations, nextSeries)
       }
+      return;
     }
-    return;
   }
 
   MyAnimeList.fromId(seriesId).then(function (malSeries) {
@@ -237,7 +237,7 @@ var process9AnimeEpisodeInfo = (error, response, body, episodeId, malSeries, mal
 
     console.error(body);
     console.error(error);
-    process.exit(1);
+    process.exit(3);
   }
 
   //noinspection JSUnresolvedVariable
@@ -347,7 +347,7 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
           console.log(error);
           debug(error);
           fs.unlinkSync('cache/' + malSeries.id + '.json');
-          process.exit(1);
+          process.exit(2);
           return;
         }
 
