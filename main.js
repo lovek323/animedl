@@ -228,7 +228,7 @@ var process9AnimeEpisodeInfo = (error, response, body, episodeId, malSeries, mal
   try {
     body = JSON.parse(body);
   } catch (error) {
-    if (body.contains('The web server reported a gateway time-out error.')) {
+    if (body.includes('The web server reported a gateway time-out error.')) {
       debug('Gateway time-out error. Waiting 5 seconds.');
       setTimeout(() =>
         process9AnimeEpisodeInfo(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
@@ -252,7 +252,7 @@ var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisode
   try {
     body = JSON.parse(body);
   } catch (error) {
-    if (body.contains('The web server reported a gateway time-out error.')) {
+    if (body.includes('The web server reported a gateway time-out error.')) {
       debug('Gateway time-out error. Waiting 5 seconds.');
       setTimeout(() =>
         process9AnimeGrabberResponse(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
@@ -272,17 +272,11 @@ var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisode
   )
 };
 
-var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, next) {
-  var episodeName = 'Episode ' + pad(3, mapEpisodeInformation.number, '0');
-  var synopsis = '';
-  var genre = '';
+var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, next) {
+  var episodeName = malEpisodeInformation.name;
+  var synopsis = malEpisodeInformation.synopsis;
+  var genre = malSeries.genres[0];
   var contentRating = '';
-
-  if (mapEpisodeInformation !== null) {
-    episodeName = mapEpisodeInformation.name;
-    synopsis = mapEpisodeInformation.synopsis;
-    genre = malSeries.genres[0];
-  }
 
   switch (malSeries.classification) {
     case "PG-13 - Teens 13 or older":
@@ -295,19 +289,22 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
       throw new Error('Unrecognised classification: ' + malSeries.classification);
   }
 
-  var malAired = malSeries.aired.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]{2}), ([0-9]{4})/);
-  var malYear = malAired[3];
-
   var fileName = getFileName();
-  var finalFileName = getFinalFileName(mapEpisodeInformation, malSeries, episodeName);
+  var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, episodeName);
 
-  console.log('Downloading ' + mapEpisodeInformation.number + ' - ' + mapEpisodeInformation.name + ' (' +
+  console.log('Downloading ' + malEpisodeInformation.number + ' - ' + malEpisodeInformation.name + ' (' +
     bestVideo.resolution + 'p) to ' + finalFileName);
 
   if (fs.existsSync(finalFileName)) {
     next();
     return;
   }
+
+  var aired = malEpisodeInformation.aired;
+  if (typeof aired === 'object') {
+    aired = aired.toISOString();
+  }
+  aired = aired.replace('.000', '');
 
   var jpgFile = fs.createWriteStream('temp.jpg');
   jpgFile.on('finish', () => {
@@ -324,11 +321,11 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
         '--TVShowName',
         malSeries.title,
         '--TVEpisodeNum',
-        mapEpisodeInformation.number,
+        malEpisodeInformation.number,
         '--artwork',
         'temp.jpg',
         '--year',
-        malYear,
+        aired,
         '--longdesc',
         synopsis,
         '--storedesc',
@@ -336,7 +333,7 @@ var downloadEpisode = function (malSeries, mapEpisodeInformation, bestVideo, nex
         '--title',
         episodeName,
         '--tracknum',
-        mapEpisodeInformation.number + '/' + malSeries.episodes,
+        malEpisodeInformation.number + '/' + malSeries.episodes,
         '--contentRating',
         contentRating
       ];
