@@ -181,13 +181,13 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
             });
 
             async.eachSeries(Object.keys(episodes), (episode, nextEpisode) => {
-              var episodeId = episodes[episode][0];
-              var episodeNumber = parseInt(episode.match(/^([0-9]+)/)[1]);
+              var _9AnimeEpisodeId = episodes[episode][0];
+              var _9AnimeEpisodeNumber = parseInt(episode.match(/^([0-9]+)/)[1]);
               var malEpisodeInformation = null;
-              var episodeName = 'Episode ' + pad(3, episodeNumber, '0');
+              var episodeName = 'Episode ' + pad(3, _9AnimeEpisodeNumber, '0');
 
               for (var i = 0; i < malEpisodeInformations.length; i++) {
-                if (malEpisodeInformations[i].number == episodeNumber) {
+                if (malEpisodeInformations[i].number == _9AnimeEpisodeNumber) {
                   malEpisodeInformation = malEpisodeInformations[i];
                   break;
                 }
@@ -205,9 +205,16 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
               }
 
               request(
-                'http://9anime.to/ajax/episode/info?id=' + episodeId + '&update=0&film=' + filmId,
-                (error, response, body) =>
-                  process9AnimeEpisodeInfo(error, response, body, episodeId, malSeries, malEpisodeInformation, nextEpisode)
+                'http://9anime.to/ajax/episode/info?id=' + _9AnimeEpisodeId + '&update=0&film=' + filmId,
+                (error, response, body) => process9AnimeEpisodeInfo(
+                  error,
+                  response,
+                  body,
+                  _9AnimeEpisodeId,
+                  malSeries,
+                  malEpisodeInformation,
+                  nextEpisode
+                )
               )
             }, nextSeries);
           });
@@ -221,9 +228,10 @@ var process9AnimeEpisodeInfo = (error, response, body, episodeId, malSeries, mal
   try {
     body = JSON.parse(body);
   } catch (error) {
-    if (error.contains('The web server reported a gateway time-out error.')) {
+    if (body.contains('The web server reported a gateway time-out error.')) {
       debug('Gateway time-out error. Waiting 5 seconds.');
-      setTimeout(() => process9AnimeEpisodeInfo(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
+      setTimeout(() =>
+        process9AnimeEpisodeInfo(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
       return;
     }
 
@@ -244,7 +252,7 @@ var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisode
   try {
     body = JSON.parse(body);
   } catch (error) {
-    if (error.contains('The web server reported a gateway time-out error.')) {
+    if (body.contains('The web server reported a gateway time-out error.')) {
       debug('Gateway time-out error. Waiting 5 seconds.');
       setTimeout(() =>
         process9AnimeGrabberResponse(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
