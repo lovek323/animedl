@@ -20,9 +20,6 @@ var util = require('util');
 
 const debug = require('debug')('animedl');
 
-var provider = '9anime.to';
-// var provider = 'kissanime.to';
-
 String.prototype.replaceAll = function (search, replacement) {
   var target = this;
   return target.replace(new RegExp(search, 'g'), replacement);
@@ -55,13 +52,33 @@ var getFileName = () => {
 };
 
 var getFinalFileName = (malEpisodeInformation, malSeries, episodeName) => {
-  return config.finalDirectory + '/' + sanitise(malSeries.title) + '/' + pad(2, malEpisodeInformation.number, '0') + ' ' +
-    sanitise(episodeName) + '.mp4';
+  if (malSeries.episodes === '1') {
+    return config.moviesFinalDirectory + '/' + sanitise(malSeries.title) + '/' + sanitise(malSeries.title) + '.mp4';
+  } else {
+    return config.tvFinalDirectory + '/' + sanitise(malSeries.title) + '/' +
+      pad(2, malEpisodeInformation.number, '0') + ' ' + sanitise(episodeName) + '.mp4';
+  }
 };
 
-var runSeries = function (series, nextSeries) {
+var getTemporaryFilename = (malSeries, malEpisodeInformation, extension) => {
+  if (malSeries.episodes === '1') {
+    return 'cache/' + sanitise(malSeries.title) + '.' + extension;
+  } else {
+    var episodeName = malSeries.episodes === '1' ? malSeries.title : malEpisodeInformation.name;
+    return 'cache/' + sanitise(malSeries.title) + '_' + pad(2, malEpisodeInformation.number, '0') + ' ' +
+      sanitise(episodeName) + '.' + extension;
+  }
+};
+
+var runSeries = function (series, nextSeries, provider) {
   var seriesId = series.id;
   var cacheFile = "cache/" + seriesId + ".json";
+
+  //noinspection JSUnresolvedVariable
+  if (typeof series.provider !== 'undefined') {
+    //noinspection JSUnresolvedVariable
+    provider = series.provider;
+  }
 
   debug('Processing series: ' + seriesId);
 
@@ -134,8 +151,13 @@ var runSeriesKissanime = (title, malSeries, malEpisodeInformations, nextSeries) 
   Kissanime.fromUrl(url).then(kissanimeSeries => {
     kissanimeSeries.fetchAllEpisodes().then(kissanimeEpisodes => {
       async.eachSeries(kissanimeEpisodes, (kissanimeEpisode, nextEpisode) => {
-        var kissanimeEpisodeNumber = kissanimeEpisode.name.match(/Episode ([0-9]+)/)[1];
         var malEpisodeInformation = null;
+        var kissanimeEpisodeNumber = 0;
+        var kissanimeEpisodeNumberMatch = kissanimeEpisode.name.match(/Episode ([0-9]+)/);
+
+        if (kissanimeEpisodeNumberMatch !== null) {
+          kissanimeEpisodeNumber = kissanimeEpisodeNumberMatch[1];
+        }
 
         for (var i = 0; i < malEpisodeInformations.length; i++) {
           if (malEpisodeInformations[i].number == kissanimeEpisodeNumber) {
@@ -163,11 +185,13 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
     (error, response, body) => {
       body = JSON.parse(body);
       var $ = cheerio.load(body.html);
+      var found = false;
       $(".item a.name").each((index, element) => {
         var url = $(element).attr('href');
         var filmId = url.match(/\/(.*?)$/)[1];
         var name = $(element).text();
         if (name.toLowerCase() === title.toLowerCase()) {
+          found = true;
           cachedRequest(url, (error, response, body) => {
             var $ = cheerio.load(body);
             var episodes = {};
@@ -182,9 +206,13 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
 
             async.eachSeries(Object.keys(episodes), (episode, nextEpisode) => {
               var _9AnimeEpisodeId = episodes[episode][0];
-              var _9AnimeEpisodeNumber = parseInt(episode.match(/^([0-9]+)/)[1]);
+              var _9AnimeEpisodeNumberMatch = episode.match(/^([0-9]+)/);
+              var _9AnimeEpisodeNumber = 0;
               var malEpisodeInformation = null;
-              var episodeName = 'Episode ' + pad(3, _9AnimeEpisodeNumber, '0');
+
+              if (_9AnimeEpisodeNumberMatch !== null) {
+                _9AnimeEpisodeNumber = parseInt(_9AnimeEpisodeNumberMatch[0]);
+              }
 
               for (var i = 0; i < malEpisodeInformations.length; i++) {
                 if (malEpisodeInformations[i].number == _9AnimeEpisodeNumber) {
@@ -193,14 +221,15 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
                 }
               }
 
-              if (malEpisodeInformation !== null) {
-                episodeName = malEpisodeInformation.name;
-              }
-
+              var episodeName = malSeries.episodes === '1' ? malSeries.title : malEpisodeInformation.name;
               var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, episodeName);
 
               if (fs.existsSync(finalFileName)) {
-                debug('Skipping episode ' + malEpisodeInformation.number);
+                if (malSeries.episodes === '1') {
+                  debug('Skipping ' + malSeries.title);
+                } else {
+                  debug('Skipping episode ' + malEpisodeInformation.number);
+                }
                 nextEpisode();
                 return;
               }
@@ -221,6 +250,11 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
           });
         }
       });
+
+      if (!found) {
+        debug('Could not find ' + title + ' in 9anime.to\'s database');
+        nextSeries();
+      }
     }
   );
 };
@@ -274,12 +308,75 @@ var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisode
 };
 
 var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, next) {
-  var episodeName = malEpisodeInformation.name;
-  var synopsis = malEpisodeInformation.synopsis;
+  var title = malSeries.episodes === '1' ? malSeries.title : malEpisodeInformation.name;
+  var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, title);
+
+  if (fs.existsSync(finalFileName)) {
+    next();
+    return;
+  }
+
+  if (malSeries.episodes === '1') {
+    console.log('Downloading ' + malSeries.title + ' (' + bestVideo.resolution + 'p) to ' + finalFileName);
+  } else {
+    console.log('Downloading ' + malEpisodeInformation.number + ' - ' + malEpisodeInformation.name + ' (' +
+      bestVideo.resolution + 'p) to ' + finalFileName);
+  }
+
+  if (!fs.existsSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'))) {
+    var jpgFile = fs.createWriteStream(getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'));
+    jpgFile.on('finish', () => downloadMp4(malSeries, malEpisodeInformation, bestVideo));
+
+    //noinspection JSUnresolvedFunction
+    request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
+  } else if (!fs.existsSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'))) {
+    downloadMp4(malSeries, malEpisodeInformation, bestVideo);
+  } else {
+    writeMetadataAndMoveFile(malSeries, malEpisodeInformation, title, next);
+  }
+};
+
+var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo) => {
+  var mp4File = fs.createWriteStream(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'));
+  mp4File.on('finish', () => writeMetadataAndMoveFile(malSeries, malEpisodeInformation));
+
+  //noinspection JSUnresolvedFunction
+  var bar = new ProgressBar(
+    '[:bar] :bytesTransferred/:bytesTotal :percent :speed/s :remainingTime remaining',
+    {
+      bytesTransferred: '',
+      bytesTotal: '',
+      remainingTime: '',
+      speed: '',
+      total: 100
+    }
+  );
+  //noinspection JSUnresolvedFunction
+  progress(request({url: bestVideo.url, method: 'GET', followAllRedirects: true}))
+    .on(
+      'progress',
+      state => bar.update(
+        state.percentage,
+        {
+          bytesTransferred: numeral(state.size.transferred).format('0b'),
+          bytesTotal: numeral(state.size.total).format('0b'),
+          remainingTime: numeral(state.time.remaining).format('00:00:00'),
+          speed: numeral(state.speed).format('0b')
+        }
+      )
+    )
+    .pipe(mp4File);
+};
+
+var writeMetadataAndMoveFile = (malSeries, malEpisodeInformation, title, next) => {
+  var synopsis = malSeries.episodes === '1' ? malSeries.synopsis : malEpisodeInformation.synopsis;
   var genre = malSeries.genres[0];
   var contentRating = '';
 
   switch (malSeries.classification) {
+    case "G - All Ages":
+      contentRating = "G";
+      break;
     case "PG-13 - Teens 13 or older":
       contentRating = "PG-13";
       break;
@@ -290,103 +387,135 @@ var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, nex
       throw new Error('Unrecognised classification: ' + malSeries.classification);
   }
 
+  var aired;
+  if (malSeries.episodes === '1') {
+    aired = new Date(malSeries.aired).toISOString();
+  } else {
+    aired = malEpisodeInformation.aired;
+    if (typeof aired === 'object') {
+      aired = aired.toISOString();
+    }
+    aired = aired.replace('.000', '');
+  }
+
   var fileName = getFileName();
-  var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, episodeName);
 
-  console.log('Downloading ' + malEpisodeInformation.number + ' - ' + malEpisodeInformation.name + ' (' +
-    bestVideo.resolution + 'p) to ' + finalFileName);
+  var args = [
+    'AtomicParsley',
+    getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'),
+    '--overWrite',
+    '--genre',
+    genre,
+    '--artwork',
+    getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'),
+    '--year',
+    aired,
+    '--longdesc',
+    synopsis,
+    '--storedesc',
+    malSeries.synopsis,
+    '--contentRating',
+    contentRating,
+    '--grouping',
+    malSeries.type
+  ];
 
-  if (fs.existsSync(finalFileName)) {
-    next();
-    return;
+  if (malSeries.episodes === '1') {
+    // Treat this as a movie
+    args = args.concat([
+      '--stik',
+      'Movie',
+      '--title',
+      malSeries.title,
+    ]);
+  } else {
+    // Treat this as a TV series
+    args = args.concat([
+      '--stik',
+      'TV Show',
+      '--title',
+      title,
+      '--tracknum',
+      malEpisodeInformation.number + '/' + malSeries.episodes,
+      '--TVShowName',
+      malSeries.title,
+      '--TVEpisodeNum',
+      malEpisodeInformation.number,
+    ]);
   }
 
-  var aired = malEpisodeInformation.aired;
-  if (typeof aired === 'object') {
-    aired = aired.toISOString();
-  }
-  aired = aired.replace('.000', '');
+  exec(shellescape(args), error => {
+    if (error) {
+      console.log(error);
+      debug(error);
+      process.exit(2);
+      return;
+    }
 
-  var jpgFile = fs.createWriteStream('temp.jpg');
-  jpgFile.on('finish', () => {
-    var mp4File = fs.createWriteStream('temp.mp4');
-    mp4File.on('finish', () => {
-      var args = [
-        'AtomicParsley',
-        'temp.mp4',
-        '--overWrite',
-        '--genre',
-        genre,
-        '--stik',
-        'TV Show',
-        '--TVShowName',
-        malSeries.title,
-        '--TVEpisodeNum',
-        malEpisodeInformation.number,
-        '--artwork',
-        'temp.jpg',
-        '--year',
-        aired,
-        '--longdesc',
-        synopsis,
-        '--storedesc',
-        malSeries.synopsis,
-        '--title',
-        episodeName,
-        '--tracknum',
-        malEpisodeInformation.number + '/' + malSeries.episodes,
-        '--contentRating',
-        contentRating,
-        '--grouping',
-        malSeries.type
-      ];
-
-      var cmd = shellescape(args);
-      exec(cmd, error => {
-        if (error) {
-          console.log(error);
-          debug(error);
-          fs.unlinkSync('cache/' + malSeries.id + '.json');
-          process.exit(2);
-          return;
+    args = ['perl', 'iTunMOVI-1.1.pl'];
+    malSeries.characters.forEach(character => {
+      if (character.actor === '' || character.language !== 'Japanese') {
+        // We are adding actors, not characters and Japanese voice actors not English dub actors
+        return;
+      }
+      var match = character.actor.match(/(.*), (.*)/);
+      var actor = match[2] + ' ' + match[1];
+      args.push('--cast');
+      args.push(actor);
+    });
+    malSeries.staff.forEach(staff => {
+      var match = staff.name.match(/(.*), (.*)/);
+      var name = match[2] + ' ' + match[1];
+      staff.role.forEach(role => {
+        switch (role) {
+          case 'Director':
+            args.push('--directors');
+            args.push(name);
+            break;
+          case 'Producer':
+            args.push('--producers');
+            args.push(name);
+            break;
+          case 'Script':
+          case 'Storyboard':
+            args.push('--screenwriters');
+            args.push(name);
+            break;
+          case 'Sound Director':
+            args.push('--codirectors');
+            args.push(name);
+            break;
+          case 'Music':
+          case 'Series Composition':
+            break;
+            // Ignore these roles, they don't fit
+            break;
+          default:
+            throw new Error('Unrecognised staff role: ' + role);
         }
-
-        fs.renameSync('temp.mp4', fileName);
-        console.log('');
-        next();
       });
     });
+    malSeries.studios.forEach(studio => {
+      args.push('--studio');
+      args.push(studio);
+    });
+    args.push('--file');
+    args.push(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'));
+    args.push('--write');
 
-    //noinspection JSUnresolvedFunction
-    var bar = new ProgressBar(
-      '[:bar] :bytesTransferred/:bytesTotal :percent :speed/s :remainingTime remaining',
-      {
-        bytesTransferred: '',
-        bytesTotal: '',
-        remainingTime: '',
-        speed: '',
-        total: 100
+    exec(shellescape(args), error => {
+      if (error) {
+        console.log(error);
+        debug(error);
+        process.exit(4);
+        return;
       }
-    );
-    //noinspection JSUnresolvedFunction
-    progress(request({url: bestVideo.url, method: 'GET', followAllRedirects: true}))
-      .on(
-        'progress',
-        state => bar.update(
-          state.percentage,
-          {
-            bytesTransferred: numeral(state.size.transferred).format('0b'),
-            bytesTotal: numeral(state.size.total).format('0b'),
-            remainingTime: numeral(state.time.remaining).format('00:00:00'),
-            speed: numeral(state.speed).format('0b')
-          }
-        )
-      )
-      .pipe(mp4File);
-  });
 
-  //noinspection JSUnresolvedFunction
-  request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
+      fs.renameSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'), fileName);
+      console.log('');
+      next();
+    });
+  });
 };
 
 var getBestVideoFromKissanimeEpisode = (kissanimeEpisode) => {
@@ -452,7 +581,8 @@ var getBestVideoFrom9AnimeEpisode = (_9AnimeEpisode) => {
 
   return {url: bestLink, resolution: bestResolution};
 };
-async.eachSeries(config.series, runSeries);
+
+async.eachSeries(config.series, runSeries, '9anime.to');
 
 /* Kissanime.search('').then(function (results) {
  var cacheFile = "cache/search.json";
