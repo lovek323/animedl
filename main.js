@@ -66,16 +66,28 @@ var getFinalFileName = (malSeries, malEpisodeInformation) => {
   }
 };
 
-var getSeriesTitle = (malSeries) => malSeries.alternativeTitles.english[0] + ' (' + malSeries.title + ')';
+var getSeriesTitle = (malSeries) => {
+  var title = malSeries.title;
+  if (malSeries.alternativeTitles.english === null) {
+    return title;
+  }
+  var englishTitle = malSeries.alternativeTitles.english[0];
+  if (englishTitle.toLowerCase() === title.toLowerCase()) {
+    return title;
+  }
+  return englishTitle + ' (' + title + ')';
+};
 
 var getTemporaryFilename = (malSeries, malEpisodeInformation, extension) => {
+  var filename;
   if (malSeries.episodes === '1') {
-    return 'cache/' + sanitise(getSeriesTitle(malSeries)) + '.' + extension;
+    filename = 'cache/' + sanitise(getSeriesTitle(malSeries)) + '.' + extension;
   } else {
     var episodeName = malSeries.episodes === '1' ? getSeriesTitle(malSeries) : malEpisodeInformation.name;
-    return 'cache/' + sanitise(getSeriesTitle(malSeries)) + '_' + pad(2, malEpisodeInformation.number, '0') + ' ' +
+    filename = 'cache/' + sanitise(getSeriesTitle(malSeries)) + '_' + pad(2, malEpisodeInformation.number, '0') + ' ' +
       sanitise(episodeName) + '.' + extension;
   }
+  return filename.replaceAll("'", "_");
 };
 
 var runSeries = function (series, nextSeries, provider) {
@@ -398,18 +410,17 @@ var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, nex
 var downloadAndWriteMetadata = (malSeries, malEpisodeInformation, bestVideo, callback) => {
   var title = getSeriesTitle(malSeries);
   var temporaryMp4Filename = getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4');
-  var finalFileName = getFinalFileName(malSeries, malEpisodeInformation);
 
   if (!fs.existsSync(temporaryMp4Filename)) {
-    downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, next);
+    downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, callback);
   } else {
     writeMetadata(
       malSeries,
       malEpisodeInformation,
       title,
-      finalFileName,
+      temporaryMp4Filename,
       () => {
-        fs.renameSync(getItunesAutoAddFilename());
+        fs.renameSync(temporaryMp4Filename, getItunesAutoAddFilename());
         callback();
       }
     );
