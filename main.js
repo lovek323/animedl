@@ -55,14 +55,23 @@ var getItunesAutoAddFilename = () => {
   return config.outputDirectory + '/episode.mp4';
 };
 
-var getFinalFileName = (malSeries, malEpisodeInformation) => {
+var getFinalFileName = (malSeries, malEpisodeInformation, episodeNumber) => {
   if (malSeries.episodes === '1') {
     return config.moviesFinalDirectory + '/' + sanitise(getSeriesTitle(malSeries)) + '/' +
       sanitise(getSeriesTitle(malSeries)) + '.mp4';
   } else {
-    var episodeName = malSeries.episodes === '1' ? getSeriesTitle(malSeries) : malEpisodeInformation.name;
-    return config.tvFinalDirectory + '/' + sanitise(getSeriesTitle(malSeries)) + '/' +
-      pad(2, malEpisodeInformation.number, '0') + ' ' + sanitise(episodeName) + '.mp4';
+    var episodeName;
+    if (malSeries.episodes === '1') {
+      episodeName = getSeriesTitle(malSeries);
+      episodeNumber = '1';
+    } else if (malEpisodeInformation !== null) {
+      episodeName = malEpisodeInformation.name;
+      episodeNumber = malEpisodeInformation.number;
+    } else {
+      episodeName = 'Episode ' + episodeNumber;
+    }
+    return config.tvFinalDirectory + '/' + sanitise(getSeriesTitle(malSeries)) + '/' + pad(2, episodeNumber, '0') +
+      ' ' + sanitise(episodeName) + '.mp4';
   }
 };
 
@@ -78,13 +87,22 @@ var getSeriesTitle = (malSeries) => {
   return englishTitle + ' (' + title + ')';
 };
 
-var getTemporaryFilename = (malSeries, malEpisodeInformation, extension) => {
+var getTemporaryFilename = (malSeries, malEpisodeInformation, episodeNumber, extension) => {
   var filename;
   if (malSeries.episodes === '1') {
     filename = 'cache/' + sanitise(getSeriesTitle(malSeries)) + '.' + extension;
   } else {
-    var episodeName = malSeries.episodes === '1' ? getSeriesTitle(malSeries) : malEpisodeInformation.name;
-    filename = 'cache/' + sanitise(getSeriesTitle(malSeries)) + '_' + pad(2, malEpisodeInformation.number, '0') + ' ' +
+    var episodeName;
+    if (malSeries.episodes === '1') {
+      episodeName = getSeriesTitle(malSeries);
+      episodeNumber = '1';
+    } else if (malEpisodeInformation !== null) {
+      episodeName = malEpisodeInformation.name;
+      episodeNumber = malEpisodeInformation.number;
+    } else {
+      episodeName = 'Episode ' + episodeNumber;
+    }
+    filename = 'cache/' + sanitise(getSeriesTitle(malSeries)) + '_' + pad(2, episodeNumber, '0') + ' ' +
       sanitise(episodeName) + '.' + extension;
   }
   return filename.replaceAll("'", "_");
@@ -148,13 +166,20 @@ var fetchSeries = (series, malSeries, malEpisodeInformations, provider, callback
   }
 
   var notPresent = 0;
+  var i;
   if (malSeries.episodes === '1') {
     if (!fs.existsSync(getFinalFileName(malSeries))) {
       notPresent++;
     }
-  } else {
-    for (var i = 0; i < malEpisodeInformations.length; i++) {
+  } else if (malEpisodeInformations.length > 0) {
+    for (i = 0; i < malEpisodeInformations.length; i++) {
       if (!fs.existsSync(getFinalFileName(malSeries, malEpisodeInformations[i]))) {
+        notPresent++;
+      }
+    }
+  } else {
+    for (i = 0; i < parseInt(malSeries.episodes); i++) {
+      if (!fs.existsSync(getFinalFileName(malSeries, null, i + 1))) {
         notPresent++;
       }
     }
@@ -163,7 +188,12 @@ var fetchSeries = (series, malSeries, malEpisodeInformations, provider, callback
   if (notPresent === 0) {
     if (UPDATE) {
       async.eachSeries(malEpisodeInformations, (malEpisodeInformation, next) => {
-        var temporaryJpgFilename = getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg');
+        var temporaryJpgFilename = getTemporaryFilename(
+          malSeries,
+          malEpisodeInformation,
+          malEpisodeInformation.number,
+          'jpg'
+        );
         if (!fs.existsSync(temporaryJpgFilename)) {
           var jpgFile = fs.createWriteStream(temporaryJpgFilename);
           jpgFile.on('finish', () => {
@@ -245,6 +275,7 @@ var fetchKissanime = (title, malSeries, malEpisodeInformations, nextSeries) => {
           malSeries,
           malEpisodeInformation,
           getBestVideoFromKissanimeEpisode(kissanimeEpisode),
+          kissanimeEpisodeNumber,
           nextEpisode
         );
       }, nextSeries);
@@ -296,13 +327,13 @@ var fetch9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => {
                 }
               }
 
-              var finalFileName = getFinalFileName(malSeries, malEpisodeInformation);
+              var finalFileName = getFinalFileName(malSeries, malEpisodeInformation, _9AnimeEpisodeNumber);
 
               if (fs.existsSync(finalFileName)) {
                 if (malSeries.episodes === '1') {
                   debug('Skipping ' + getSeriesTitle(malSeries));
                 } else {
-                  debug('Skipping episode ' + malEpisodeInformation.number);
+                  debug('Skipping episode ' + _9AnimeEpisodeNumber);
                 }
                 nextEpisode();
                 return;
@@ -317,6 +348,7 @@ var fetch9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => {
                   _9AnimeEpisodeId,
                   malSeries,
                   malEpisodeInformation,
+                  _9AnimeEpisodeNumber,
                   nextEpisode
                 )
               )
@@ -333,14 +365,30 @@ var fetch9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => {
   );
 };
 
-var process9AnimeEpisodeInfo = (error, response, body, episodeId, malSeries, malEpisodeInformation, nextEpisode) => {
+var process9AnimeEpisodeInfo = (error,
+                                response,
+                                body,
+                                episodeId,
+                                malSeries,
+                                malEpisodeInformation,
+                                episodeNumber,
+                                nextEpisode) => {
   try {
     body = JSON.parse(body);
   } catch (error) {
     if (body.includes('The web server reported a gateway time-out error.')) {
       debug('Gateway time-out error. Waiting 5 seconds.');
-      setTimeout(() =>
-        process9AnimeEpisodeInfo(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
+      setTimeout(
+        () => process9AnimeEpisodeInfo(
+          error,
+          response,
+          body,
+          malSeries,
+          malEpisodeInformation,
+          episodeNumber,
+          nextEpisode
+        ),
+        5000);
       return;
     }
 
@@ -354,17 +402,33 @@ var process9AnimeEpisodeInfo = (error, response, body, episodeId, malSeries, mal
     body.params.options + '&mobile=0';
 
   request(url, (error, response, body) =>
-    process9AnimeGrabberResponse(error, response, body, malSeries, malEpisodeInformation, nextEpisode));
+    process9AnimeGrabberResponse(error, response, body, malSeries, malEpisodeInformation, episodeNumber, nextEpisode));
 };
 
-var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisodeInformation, nextEpisode) => {
+var process9AnimeGrabberResponse = (error,
+                                    response,
+                                    body,
+                                    malSeries,
+                                    malEpisodeInformation,
+                                    episodeNumber,
+                                    nextEpisode) => {
   try {
     body = JSON.parse(body);
   } catch (error) {
     if (body.includes('The web server reported a gateway time-out error.')) {
       debug('Gateway time-out error. Waiting 5 seconds.');
-      setTimeout(() =>
-        process9AnimeGrabberResponse(error, response, body, malSeries, malEpisodeInformation, nextEpisode), 5000);
+      setTimeout(
+        () => process9AnimeGrabberResponse(
+          error,
+          response,
+          body,
+          malSeries,
+          malEpisodeInformation,
+          episodeNumber,
+          nextEpisode
+        ),
+        5000
+      );
       return;
     }
 
@@ -377,48 +441,59 @@ var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisode
     malSeries,
     malEpisodeInformation,
     getBestVideoFrom9AnimeEpisode(body),
+    episodeNumber,
     nextEpisode
   )
 };
 
-var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, next) {
-  var finalFileName = getFinalFileName(malSeries, malEpisodeInformation);
+var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, episodeNumber, next) {
+  var finalFileName = getFinalFileName(malSeries, malEpisodeInformation, episodeNumber);
 
   if (fs.existsSync(finalFileName)) {
     next();
     return;
   }
 
+  var episodeName = null;
   if (malSeries.episodes === '1') {
     console.log('Downloading ' + getSeriesTitle(malSeries) + ' (' + bestVideo.resolution + 'p) to ' + finalFileName);
   } else {
-    console.log('Downloading ' + getSeriesTitle(malSeries) + ' - ' + malEpisodeInformation.number + ' - '
-      + malEpisodeInformation.name + ' (' + bestVideo.resolution + 'p) to ' + finalFileName);
+    if (malEpisodeInformation !== null) {
+      episodeName = malEpisodeInformation.name;
+    } else {
+      episodeName = 'Episode ' + episodeNumber;
+    }
+    console.log('Downloading ' + getSeriesTitle(malSeries) + ' - ' + episodeNumber + ' - ' + episodeName + ' (' +
+      bestVideo.resolution + 'p) to ' + finalFileName);
   }
 
-  var temporaryJpgFilename = getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg');
+  var temporaryJpgFilename = getTemporaryFilename(malSeries, malEpisodeInformation, episodeNumber, 'jpg');
   if (!fs.existsSync(temporaryJpgFilename)) {
     var jpgFile = fs.createWriteStream(temporaryJpgFilename);
-    jpgFile.on('finish', () => downloadAndWriteMetadata(malSeries, malEpisodeInformation, bestVideo, next));
+    jpgFile.on(
+      'finish',
+      () => downloadAndWriteMetadata(malSeries, malEpisodeInformation, bestVideo, episodeNumber, next)
+    );
     //noinspection JSUnresolvedFunction
     request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
   } else {
-    downloadAndWriteMetadata(malSeries, malEpisodeInformation, bestVideo, next);
+    downloadAndWriteMetadata(malSeries, malEpisodeInformation, bestVideo, episodeNumber, next);
   }
 };
 
-var downloadAndWriteMetadata = (malSeries, malEpisodeInformation, bestVideo, callback) => {
+var downloadAndWriteMetadata = (malSeries, malEpisodeInformation, bestVideo, episodeNumber, callback) => {
   var title = getSeriesTitle(malSeries);
-  var temporaryMp4Filename = getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4');
+  var temporaryMp4Filename = getTemporaryFilename(malSeries, malEpisodeInformation, episodeNumber, 'mp4');
 
   if (!fs.existsSync(temporaryMp4Filename)) {
-    downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, callback);
+    downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, episodeNumber, callback);
   } else {
     writeMetadata(
       malSeries,
       malEpisodeInformation,
       title,
       temporaryMp4Filename,
+      episodeNumber,
       () => {
         fs.renameSync(temporaryMp4Filename, getItunesAutoAddFilename());
         callback();
@@ -427,7 +502,7 @@ var downloadAndWriteMetadata = (malSeries, malEpisodeInformation, bestVideo, cal
   }
 };
 
-var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, next) => {
+var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, episodeNumber, next) => {
   //noinspection JSUnresolvedFunction
   var bar = new ProgressBar(
     '[:bar] :bytesTransferred/:bytesTotal :percent :speed/s :remainingTime remaining',
@@ -440,7 +515,7 @@ var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, next) => 
     }
   );
 
-  var temporaryFilename = getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4');
+  var temporaryFilename = getTemporaryFilename(malSeries, malEpisodeInformation, episodeNumber, 'mp4');
   var mp4File = fs.createWriteStream(temporaryFilename);
   mp4File.on('finish', () => {
     if (bar.curr < 90) {
@@ -449,7 +524,7 @@ var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, next) => 
     } else {
       console.log('');
     }
-    writeMetadata(malSeries, malEpisodeInformation, title, () => {
+    writeMetadata(malSeries, malEpisodeInformation, title, temporaryFilename, episodeNumber, () => {
       fs.renameSync(temporaryFilename, getItunesAutoAddFilename());
       next();
     });
@@ -472,8 +547,13 @@ var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, next) => 
     .pipe(mp4File);
 };
 
-var writeMetadata = (malSeries, malEpisodeInformation, title, filename, callback) => {
-    var synopsis = malSeries.episodes === '1' ? malSeries.synopsis : malEpisodeInformation.synopsis;
+var writeMetadata = (malSeries, malEpisodeInformation, title, filename, episodeNumber, callback) => {
+    var synopsis = '';
+    if (malSeries.episodes === '1' || malEpisodeInformation === null) {
+      synopsis = malSeries.synopsis;
+    } else {
+      synopsis = malEpisodeInformation.synopsis;
+    }
     var genre = malSeries.genres[0];
     var contentRating = '';
 
@@ -492,9 +572,11 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, callback
     }
 
     var aired = null;
-
-    if (malSeries.episodes === '1') {
-      aired = new Date(malSeries.aired).toISOString();
+    if (malSeries.episodes === '1' || malEpisodeInformation === null) {
+      var match = malSeries.aired.match(/^((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]+, [0-9]{4})/);
+      if (match !== null) {
+        aired = new Date(match[1]).toISOString();
+      }
     } else if (typeof malEpisodeInformation.aired !== 'undefined' && malEpisodeInformation.aired !== null) {
       aired = malEpisodeInformation.aired;
       if (typeof aired === 'object') {
@@ -510,7 +592,7 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, callback
       '--genre',
       genre,
       '--artwork',
-      getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'),
+      getTemporaryFilename(malSeries, malEpisodeInformation, episodeNumber, 'jpg'),
       '--longdesc',
       synopsis,
       '--storedesc',
@@ -524,6 +606,13 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, callback
     if (aired !== null) {
       args.push('--year');
       args.push(aired);
+    }
+
+    var episodeName;
+    if (malEpisodeInformation !== null) {
+      episodeName = malEpisodeInformation.name;
+    } else {
+      episodeName = 'Episode ' + episodeNumber;
     }
 
     if (malSeries.episodes === '1') {
@@ -540,13 +629,13 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, callback
         '--stik',
         'TV Show',
         '--title',
-        malEpisodeInformation.name,
+        episodeName,
         '--tracknum',
-        malEpisodeInformation.number + '/' + malSeries.episodes,
+        episodeNumber + '/' + malSeries.episodes,
         '--TVShowName',
         getSeriesTitle(malSeries),
         '--TVEpisodeNum',
-        malEpisodeInformation.number,
+        episodeNumber,
       ]);
     }
 
