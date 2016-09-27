@@ -19,6 +19,7 @@ var shellescape = require('shell-escape');
 var util = require('util');
 
 const debug = require('debug')('animedl');
+const debugTrace = require('debug')('animedl-trace');
 
 String.prototype.replaceAll = function (search, replacement) {
   var target = this;
@@ -325,21 +326,18 @@ var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, nex
 
   if (!fs.existsSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'))) {
     var jpgFile = fs.createWriteStream(getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'));
-    jpgFile.on('finish', () => downloadMp4(malSeries, malEpisodeInformation, bestVideo));
+    jpgFile.on('finish', () => downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, next));
 
     //noinspection JSUnresolvedFunction
     request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
   } else if (!fs.existsSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'))) {
-    downloadMp4(malSeries, malEpisodeInformation, bestVideo);
+    downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, next);
   } else {
     writeMetadataAndMoveFile(malSeries, malEpisodeInformation, title, next);
   }
 };
 
-var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo) => {
-  var mp4File = fs.createWriteStream(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'));
-  mp4File.on('finish', () => writeMetadataAndMoveFile(malSeries, malEpisodeInformation));
-
+var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, next) => {
   //noinspection JSUnresolvedFunction
   var bar = new ProgressBar(
     '[:bar] :bytesTransferred/:bytesTotal :percent :speed/s :remainingTime remaining',
@@ -351,6 +349,17 @@ var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo) => {
       total: 100
     }
   );
+
+  var temporaryFilename = getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4');
+  var mp4File = fs.createWriteStream(temporaryFilename);
+  mp4File.on('finish', () => {
+    if (bar.curr < 90) {
+      fs.unlinkSync(temporaryFilename);
+      throw new Error('Could not download file');
+    }
+    writeMetadataAndMoveFile(malSeries, malEpisodeInformation, title, next);
+  });
+
   //noinspection JSUnresolvedFunction
   progress(request({url: bestVideo.url, method: 'GET', followAllRedirects: true}))
     .on(
@@ -444,6 +453,8 @@ var writeMetadataAndMoveFile = (malSeries, malEpisodeInformation, title, next) =
     ]);
   }
 
+  debugTrace(args);
+
   exec(shellescape(args), error => {
     if (error) {
       console.log(error);
@@ -503,6 +514,7 @@ var writeMetadataAndMoveFile = (malSeries, malEpisodeInformation, title, next) =
     args.push(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'));
     args.push('--write');
 
+    debugTrace(args);
     exec(shellescape(args), error => {
       if (error) {
         console.log(error);
