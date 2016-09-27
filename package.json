@@ -17,7 +17,7 @@
     "async": "^2.0.1",
     "cheerio": "^0.22.0",
     "debug": "^2.2.0",
-    "malapi": "lovek323/malapi#5ea82e0dce27fe19014857acee998dc4cb03ad45",
+    "malapi": "lovek323/malapi#episode_aired",
     "numeral": "^1.5.3",
     "pad": "^1.0.1",
     "progress": "^1.1.8",

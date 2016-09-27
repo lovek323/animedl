@@ -21,6 +21,9 @@ var util = require('util');
 const debug = require('debug')('animedl');
 const debugTrace = require('debug')('animedl-trace');
 
+// Set to true to update the metadata on existing files
+const UPDATE = true;
+
 String.prototype.replaceAll = function (search, replacement) {
   var target = this;
   return target.replace(new RegExp(search, 'g'), replacement);
@@ -48,25 +51,29 @@ var sanitise = string => {
   return string.replaceAll('"', '_').replaceAll(':', '_');
 };
 
-var getFileName = () => {
+var getItunesAutoAddFilename = () => {
   return config.outputDirectory + '/episode.mp4';
 };
 
-var getFinalFileName = (malEpisodeInformation, malSeries, episodeName) => {
+var getFinalFileName = (malSeries, malEpisodeInformation) => {
   if (malSeries.episodes === '1') {
-    return config.moviesFinalDirectory + '/' + sanitise(malSeries.title) + '/' + sanitise(malSeries.title) + '.mp4';
+    return config.moviesFinalDirectory + '/' + sanitise(getSeriesTitle(malSeries)) + '/' +
+      sanitise(getSeriesTitle(malSeries)) + '.mp4';
   } else {
-    return config.tvFinalDirectory + '/' + sanitise(malSeries.title) + '/' +
+    var episodeName = malSeries.episodes === '1' ? getSeriesTitle(malSeries) : malEpisodeInformation.name;
+    return config.tvFinalDirectory + '/' + sanitise(getSeriesTitle(malSeries)) + '/' +
       pad(2, malEpisodeInformation.number, '0') + ' ' + sanitise(episodeName) + '.mp4';
   }
 };
 
+var getSeriesTitle = (malSeries) => malSeries.alternativeTitles.english[0] + ' (' + malSeries.title + ')';
+
 var getTemporaryFilename = (malSeries, malEpisodeInformation, extension) => {
   if (malSeries.episodes === '1') {
-    return 'cache/' + sanitise(malSeries.title) + '.' + extension;
+    return 'cache/' + sanitise(getSeriesTitle(malSeries)) + '.' + extension;
   } else {
-    var episodeName = malSeries.episodes === '1' ? malSeries.title : malEpisodeInformation.name;
-    return 'cache/' + sanitise(malSeries.title) + '_' + pad(2, malEpisodeInformation.number, '0') + ' ' +
+    var episodeName = malSeries.episodes === '1' ? getSeriesTitle(malSeries) : malEpisodeInformation.name;
+    return 'cache/' + sanitise(getSeriesTitle(malSeries)) + '_' + pad(2, malEpisodeInformation.number, '0') + ' ' +
       sanitise(episodeName) + '.' + extension;
   }
 };
@@ -81,30 +88,19 @@ var runSeries = function (series, nextSeries, provider) {
     provider = series.provider;
   }
 
-  debug('Processing series: ' + seriesId);
-
   if (fs.existsSync(cacheFile)) {
     var stat = fs.statSync(cacheFile);
     var mtime = new Date(util.inspect(stat.mtime));
     var yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
     if (mtime > yesterday) {
       var cacheObject = require('./cache/' + seriesId);
-      var malSeries = cacheObject.malSeries;
-      var malEpisodeInformations = cacheObject.malEpisodeInformations;
-
-      if (provider === 'kissanime.to') {
-        //noinspection JSUnresolvedVariable
-        runSeriesKissanime(series.kissanimeTitle, malSeries, malEpisodeInformations, nextSeries)
-      } else {
-        //noinspection JSUnresolvedVariable
-        runSeries9Anime(series._9AnimeTitle, malSeries, malEpisodeInformations, nextSeries)
-      }
+      fetchSeries(series, cacheObject.malSeries, cacheObject.malEpisodeInformations, provider, nextSeries);
       return;
     }
   }
 
   MyAnimeList.fromId(seriesId).then(function (malSeries) {
-    console.log('Fetching series ' + seriesId);
+    console.log('Fetching series from MAL with ID ' + seriesId);
 
     malSeries.getEpisodes().then(malEpisodes => {
       var malEpisodeInformations = [];
@@ -118,25 +114,91 @@ var runSeries = function (series, nextSeries, provider) {
         var cacheObject = {malSeries, malEpisodeInformations};
         fs.writeFileSync(cacheFile, JSON.stringify(cacheObject));
 
-        if (provider === 'kissanime.to') {
-          //noinspection JSUnresolvedVariable
-          runSeriesKissanime(series.kissanimeTitle, malSeries, malEpisodeInformations, nextSeries)
-        } else {
-          //noinspection JSUnresolvedVariable
-          runSeries9Anime(series._9AnimeTitle, malSeries, malEpisodeInformations, nextSeries)
-        }
+        fetchSeries(series, cacheObject.malSeries, cacheObject.malEpisodeInformations, provider, nextSeries);
       });
     });
   });
 };
 
-var runSeriesKissanime = (title, malSeries, malEpisodeInformations, nextSeries) => {
+var fetchSeries = (series, malSeries, malEpisodeInformations, provider, callback) => {
+  var title;
+  switch (provider) {
+    case 'kissanime.to':
+      //noinspection JSUnresolvedVariable
+      title = series.kissanimeTitle;
+      break;
+    case '9anime.to':
+      //noinspection JSUnresolvedVariable
+      title = series._9AnimeTitle;
+      break;
+    default:
+      throw new Error('Unrecognised provider: ' + provider);
+  }
+
+  var notPresent = 0;
+  if (malSeries.episodes === '1') {
+    if (!fs.existsSync(getFinalFileName(malSeries))) {
+      notPresent++;
+    }
+  } else {
+    for (var i = 0; i < malEpisodeInformations.length; i++) {
+      if (!fs.existsSync(getFinalFileName(malSeries, malEpisodeInformations[i]))) {
+        notPresent++;
+      }
+    }
+  }
+
+  if (notPresent === 0) {
+    if (UPDATE) {
+      async.eachSeries(malEpisodeInformations, (malEpisodeInformation, next) => {
+        var temporaryJpgFilename = getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg');
+        if (!fs.existsSync(temporaryJpgFilename)) {
+          var jpgFile = fs.createWriteStream(temporaryJpgFilename);
+          jpgFile.on('finish', () => {
+            writeMetadata(
+              malSeries,
+              malEpisodeInformation,
+              title,
+              getFinalFileName(malSeries, malEpisodeInformation),
+              next
+            );
+          });
+          //noinspection JSUnresolvedFunction
+          request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
+        } else {
+          console.log('Rewriting metadata for ' + getFinalFileName(malSeries, malEpisodeInformation));
+          writeMetadata(
+            malSeries,
+            malEpisodeInformation,
+            title,
+            getFinalFileName(malSeries, malEpisodeInformation),
+            next
+          );
+        }
+      }, callback);
+    }
+
+    // All episodes have been downloaded
+    return;
+  }
+
+  if (provider === 'kissanime.to') {
+    //noinspection JSUnresolvedVariable
+    fetchKissanime(series.kissanimeTitle, malSeries, malEpisodeInformations, callback)
+  } else {
+    //noinspection JSUnresolvedVariable
+    fetch9Anime(series._9AnimeTitle, malSeries, malEpisodeInformations, callback)
+  }
+};
+
+var fetchKissanime = (title, malSeries, malEpisodeInformations, nextSeries) => {
   console.log('Fetching series ' + title);
 
   var url = null;
+  var i;
 
   //noinspection JSUnresolvedVariable
-  for (var i = 0; i < kissanimeSeries.length; i++) {
+  for (i = 0; i < kissanimeSeries.length; i++) {
     if (kissanimeSeries[i].name == title) {
       url = kissanimeSeries[i].url;
       break;
@@ -178,7 +240,7 @@ var runSeriesKissanime = (title, malSeries, malEpisodeInformations, nextSeries) 
   });
 };
 
-var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => {
+var fetch9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => {
   console.log('Fetching series ' + title);
 
   cachedRequest(
@@ -222,12 +284,11 @@ var runSeries9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => 
                 }
               }
 
-              var episodeName = malSeries.episodes === '1' ? malSeries.title : malEpisodeInformation.name;
-              var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, episodeName);
+              var finalFileName = getFinalFileName(malSeries, malEpisodeInformation);
 
               if (fs.existsSync(finalFileName)) {
                 if (malSeries.episodes === '1') {
-                  debug('Skipping ' + malSeries.title);
+                  debug('Skipping ' + getSeriesTitle(malSeries));
                 } else {
                   debug('Skipping episode ' + malEpisodeInformation.number);
                 }
@@ -309,8 +370,7 @@ var process9AnimeGrabberResponse = (error, response, body, malSeries, malEpisode
 };
 
 var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, next) {
-  var title = malSeries.episodes === '1' ? malSeries.title : malEpisodeInformation.name;
-  var finalFileName = getFinalFileName(malEpisodeInformation, malSeries, title);
+  var finalFileName = getFinalFileName(malSeries, malEpisodeInformation);
 
   if (fs.existsSync(finalFileName)) {
     next();
@@ -318,22 +378,41 @@ var downloadEpisode = function (malSeries, malEpisodeInformation, bestVideo, nex
   }
 
   if (malSeries.episodes === '1') {
-    console.log('Downloading ' + malSeries.title + ' (' + bestVideo.resolution + 'p) to ' + finalFileName);
+    console.log('Downloading ' + getSeriesTitle(malSeries) + ' (' + bestVideo.resolution + 'p) to ' + finalFileName);
   } else {
-    console.log('Downloading ' + malEpisodeInformation.number + ' - ' + malEpisodeInformation.name + ' (' +
-      bestVideo.resolution + 'p) to ' + finalFileName);
+    console.log('Downloading ' + getSeriesTitle(malSeries) + ' - ' + malEpisodeInformation.number + ' - '
+      + malEpisodeInformation.name + ' (' + bestVideo.resolution + 'p) to ' + finalFileName);
   }
 
-  if (!fs.existsSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'))) {
-    var jpgFile = fs.createWriteStream(getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'));
-    jpgFile.on('finish', () => downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, next));
-
+  var temporaryJpgFilename = getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg');
+  if (!fs.existsSync(temporaryJpgFilename)) {
+    var jpgFile = fs.createWriteStream(temporaryJpgFilename);
+    jpgFile.on('finish', () => downloadAndWriteMetadata(malSeries, malEpisodeInformation, bestVideo, next));
     //noinspection JSUnresolvedFunction
     request({url: malSeries.image, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
-  } else if (!fs.existsSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'))) {
+  } else {
+    downloadAndWriteMetadata(malSeries, malEpisodeInformation, bestVideo, next);
+  }
+};
+
+var downloadAndWriteMetadata = (malSeries, malEpisodeInformation, bestVideo, callback) => {
+  var title = getSeriesTitle(malSeries);
+  var temporaryMp4Filename = getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4');
+  var finalFileName = getFinalFileName(malSeries, malEpisodeInformation);
+
+  if (!fs.existsSync(temporaryMp4Filename)) {
     downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, next);
   } else {
-    writeMetadataAndMoveFile(malSeries, malEpisodeInformation, title, next);
+    writeMetadata(
+      malSeries,
+      malEpisodeInformation,
+      title,
+      finalFileName,
+      () => {
+        fs.renameSync(getItunesAutoAddFilename());
+        callback();
+      }
+    );
   }
 };
 
@@ -356,8 +435,13 @@ var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, next) => 
     if (bar.curr < 90) {
       fs.unlinkSync(temporaryFilename);
       throw new Error('Could not download file');
+    } else {
+      console.log('');
     }
-    writeMetadataAndMoveFile(malSeries, malEpisodeInformation, title, next);
+    writeMetadata(malSeries, malEpisodeInformation, title, () => {
+      fs.renameSync(temporaryFilename, getItunesAutoAddFilename());
+      next();
+    });
   });
 
   //noinspection JSUnresolvedFunction
@@ -377,158 +461,167 @@ var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, next) => 
     .pipe(mp4File);
 };
 
-var writeMetadataAndMoveFile = (malSeries, malEpisodeInformation, title, next) => {
-  var synopsis = malSeries.episodes === '1' ? malSeries.synopsis : malEpisodeInformation.synopsis;
-  var genre = malSeries.genres[0];
-  var contentRating = '';
+var writeMetadata = (malSeries, malEpisodeInformation, title, filename, callback) => {
+    var synopsis = malSeries.episodes === '1' ? malSeries.synopsis : malEpisodeInformation.synopsis;
+    var genre = malSeries.genres[0];
+    var contentRating = '';
 
-  switch (malSeries.classification) {
-    case "G - All Ages":
-      contentRating = "G";
-      break;
-    case "PG-13 - Teens 13 or older":
-      contentRating = "PG-13";
-      break;
-    case "R - 17+ (violence & profanity)":
-      contentRating = "R";
-      break;
-    default:
-      throw new Error('Unrecognised classification: ' + malSeries.classification);
-  }
-
-  var aired;
-  if (malSeries.episodes === '1') {
-    aired = new Date(malSeries.aired).toISOString();
-  } else {
-    aired = malEpisodeInformation.aired;
-    if (typeof aired === 'object') {
-      aired = aired.toISOString();
-    }
-    aired = aired.replace('.000', '');
-  }
-
-  var fileName = getFileName();
-
-  var args = [
-    'AtomicParsley',
-    getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'),
-    '--overWrite',
-    '--genre',
-    genre,
-    '--artwork',
-    getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'),
-    '--year',
-    aired,
-    '--longdesc',
-    synopsis,
-    '--storedesc',
-    malSeries.synopsis,
-    '--contentRating',
-    contentRating,
-    '--grouping',
-    malSeries.type
-  ];
-
-  if (malSeries.episodes === '1') {
-    // Treat this as a movie
-    args = args.concat([
-      '--stik',
-      'Movie',
-      '--title',
-      malSeries.title,
-    ]);
-  } else {
-    // Treat this as a TV series
-    args = args.concat([
-      '--stik',
-      'TV Show',
-      '--title',
-      title,
-      '--tracknum',
-      malEpisodeInformation.number + '/' + malSeries.episodes,
-      '--TVShowName',
-      malSeries.title,
-      '--TVEpisodeNum',
-      malEpisodeInformation.number,
-    ]);
-  }
-
-  debugTrace(args);
-
-  exec(shellescape(args), error => {
-    if (error) {
-      console.log(error);
-      debug(error);
-      process.exit(2);
-      return;
+    switch (malSeries.classification) {
+      case "G - All Ages":
+        contentRating = "G";
+        break;
+      case "PG-13 - Teens 13 or older":
+        contentRating = "PG-13";
+        break;
+      case "R - 17+ (violence & profanity)":
+        contentRating = "R";
+        break;
+      default:
+        throw new Error('Unrecognised classification: ' + malSeries.classification);
     }
 
-    args = ['perl', 'iTunMOVI-1.1.pl'];
-    malSeries.characters.forEach(character => {
-      if (character.actor === '' || character.language !== 'Japanese') {
-        // We are adding actors, not characters and Japanese voice actors not English dub actors
-        return;
+    var aired = null;
+
+    if (malSeries.episodes === '1') {
+      aired = new Date(malSeries.aired).toISOString();
+    } else if (typeof malEpisodeInformation.aired !== 'undefined' && malEpisodeInformation.aired !== null) {
+      aired = malEpisodeInformation.aired;
+      if (typeof aired === 'object') {
+        aired = aired.toISOString();
       }
-      var match = character.actor.match(/(.*), (.*)/);
-      var actor = match[2] + ' ' + match[1];
-      args.push('--cast');
-      args.push(actor);
-    });
-    malSeries.staff.forEach(staff => {
-      var match = staff.name.match(/(.*), (.*)/);
-      var name = match[2] + ' ' + match[1];
-      staff.role.forEach(role => {
-        switch (role) {
-          case 'Director':
-            args.push('--directors');
-            args.push(name);
-            break;
-          case 'Producer':
-            args.push('--producers');
-            args.push(name);
-            break;
-          case 'Script':
-          case 'Storyboard':
-            args.push('--screenwriters');
-            args.push(name);
-            break;
-          case 'Sound Director':
-            args.push('--codirectors');
-            args.push(name);
-            break;
-          case 'Music':
-          case 'Series Composition':
-            break;
-            // Ignore these roles, they don't fit
-            break;
-          default:
-            throw new Error('Unrecognised staff role: ' + role);
-        }
-      });
-    });
-    malSeries.studios.forEach(studio => {
-      args.push('--studio');
-      args.push(studio);
-    });
-    args.push('--file');
-    args.push(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'));
-    args.push('--write');
+      aired = aired.replace('.000', '');
+    }
+
+    var args = [
+      'AtomicParsley',
+      filename,
+      '--overWrite',
+      '--genre',
+      genre,
+      '--artwork',
+      getTemporaryFilename(malSeries, malEpisodeInformation, 'jpg'),
+      '--longdesc',
+      synopsis,
+      '--storedesc',
+      malSeries.synopsis,
+      '--contentRating',
+      contentRating,
+      '--grouping',
+      malSeries.type
+    ];
+
+    if (aired !== null) {
+      args.push('--year');
+      args.push(aired);
+    }
+
+    if (malSeries.episodes === '1') {
+      // Treat this as a movie
+      args = args.concat([
+        '--stik',
+        'Movie',
+        '--title',
+        getSeriesTitle(malSeries),
+      ]);
+    } else {
+      // Treat this as a TV series
+      args = args.concat([
+        '--stik',
+        'TV Show',
+        '--title',
+        malEpisodeInformation.name,
+        '--tracknum',
+        malEpisodeInformation.number + '/' + malSeries.episodes,
+        '--TVShowName',
+        getSeriesTitle(malSeries),
+        '--TVEpisodeNum',
+        malEpisodeInformation.number,
+      ]);
+    }
 
     debugTrace(args);
+
     exec(shellescape(args), error => {
       if (error) {
         console.log(error);
         debug(error);
-        process.exit(4);
+        process.exit(2);
         return;
       }
 
-      fs.renameSync(getTemporaryFilename(malSeries, malEpisodeInformation, 'mp4'), fileName);
-      console.log('');
-      next();
+      args = ['perl', 'iTunMOVI-1.1.pl'];
+      malSeries.characters.forEach(character => {
+        if (character.actor === '' || character.language !== 'Japanese') {
+          // We are adding actors, not characters and Japanese voice actors not English dub actors
+          return;
+        }
+        var match = character.actor.match(/(.*), (.*)/);
+        var actor = match[2] + ' ' + match[1];
+        args.push('--cast');
+        args.push(actor);
+      });
+      malSeries.staff.forEach(staff => {
+        var match = staff.name.match(/(.*), (.*)/);
+        var name = match[2] + ' ' + match[1];
+        staff.role.forEach(role => {
+          switch (role) {
+            case 'Assistant Producer':
+            case 'Producer':
+            case 'Executive Producer':
+              args.push('--producers');
+              args.push(name);
+              break;
+            case 'Director':
+              args.push('--directors');
+              args.push(name);
+              break;
+            case 'Screenplay':
+            case 'Script':
+            case 'Storyboard':
+              args.push('--screenwriters');
+              args.push(name);
+              break;
+            case 'Episode Director':
+            case 'Sound Director':
+              args.push('--codirectors');
+              args.push(name);
+              break;
+            case '2nd Key Animation':
+            case 'Background Art':
+            case 'Key Animation':
+            case 'Music':
+            case 'Series Composition':
+            case 'Original Creator':
+            case 'Theme Song Arrangement':
+              break;
+              // Ignore these roles, they don't fit
+              break;
+            default:
+              throw new Error('Unrecognised staff role: ' + role);
+          }
+        });
+      });
+      malSeries.studios.forEach(studio => {
+        args.push('--studio');
+        args.push(studio);
+      });
+      args.push('--file');
+      args.push(filename);
+      args.push('--write');
+
+      debugTrace(args);
+      exec(shellescape(args), error => {
+        if (error) {
+          console.log(error);
+          debug(error);
+          process.exit(4);
+          return;
+        }
+        callback();
+      });
     });
-  });
-};
+  }
+  ;
 
 var getBestVideoFromKissanimeEpisode = (kissanimeEpisode) => {
   var bestLink = null;
@@ -594,7 +687,7 @@ var getBestVideoFrom9AnimeEpisode = (_9AnimeEpisode) => {
   return {url: bestLink, resolution: bestResolution};
 };
 
-async.eachSeries(config.series, runSeries, '9anime.to');
+async.eachSeries(config.series, (series, next) => runSeries(series, next, '9anime.to'));
 
 /* Kissanime.search('').then(function (results) {
  var cacheFile = "cache/search.json";
