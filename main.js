@@ -520,7 +520,9 @@ var downloadMp4 = (malSeries, malEpisodeInformation, bestVideo, title, episodeNu
   mp4File.on('finish', () => {
     if (bar.curr < 90) {
       fs.unlinkSync(temporaryFilename);
-      throw new Error('Could not download file');
+      debug('Could not download file. Waiting 5 seconds to try again.');
+      setTimeout(() => downloadMp4(malSeries, malEpisodeInformation, bestVideo, title, episodeNumber, next), 5000);
+      return;
     } else {
       console.log('');
     }
