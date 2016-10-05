@@ -1,3 +1,5 @@
 cache
 config.json
 node_modules
+tasks.xml
+workspace.xml
