@@ -5,7 +5,6 @@ var MyAnimeList = require('malapi').Anime;
 var ProgressBar = require('progress');
 
 var config = require('./config.json');
-var kissanimeSeries = require('./cache/search.json');
 
 var async = require('async');
 var cheerio = require('cheerio');
@@ -28,6 +27,17 @@ String.prototype.replaceAll = function (search, replacement) {
   var target = this;
   return target.replace(new RegExp(search, 'g'), replacement);
 };
+
+if (!fs.existsSync('cache/search.json')) {
+  console.log('Downloading kissanime search cache');
+  Kissanime.search('').then(function (results) {
+    var cacheFile = "cache/search.json";
+    fs.writeFileSync(cacheFile, JSON.stringify(results));
+  });
+  return;
+}
+
+var kissanimeSeries = require('./cache/search.json');
 
 var cachedRequest = (url, callback) => {
   var cacheFile = 'cache/' + new Buffer(url).toString('base64');
@@ -284,6 +294,10 @@ var fetchKissanime = (title, malSeries, malEpisodeInformations, nextSeries) => {
 };
 
 var fetch9Anime = (title, malSeries, malEpisodeInformations, nextSeries) => {
+  if (typeof title === 'undefined') {
+    throw new Error('No 9anime.to title defined');
+  }
+
   console.log('Fetching series ' + title);
 
   cachedRequest(
@@ -559,6 +573,7 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, episodeN
     var genre = malSeries.genres[0];
     var contentRating = '';
 
+    //noinspection JSUnresolvedVariable
     switch (malSeries.classification) {
       case "G - All Ages":
         contentRating = "G";
@@ -569,7 +584,11 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, episodeN
       case "R - 17+ (violence & profanity)":
         contentRating = "R";
         break;
+      case "None":
+        contentRating = null;
+        break;
       default:
+        //noinspection JSUnresolvedVariable
         throw new Error('Unrecognised classification: ' + malSeries.classification);
     }
 
@@ -599,11 +618,14 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, episodeN
       synopsis,
       '--storedesc',
       malSeries.synopsis,
-      '--contentRating',
-      contentRating,
       '--grouping',
       malSeries.type
     ];
+
+    if (contentRating !== null) {
+      args.push('--contentRating');
+      args.push(contentRating);
+    }
 
     if (aired !== null) {
       args.push('--year');
@@ -664,7 +686,13 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, episodeN
       });
       malSeries.staff.forEach(staff => {
         var match = staff.name.match(/(.*), (.*)/);
-        var name = match[2] + ' ' + match[1];
+        var name;
+        if (match === null) {
+          // Handle single names like 'nano'
+          name = staff.name;
+        } else {
+           name = match[2] + ' ' + match[1];
+        }
         staff.role.forEach(role => {
           switch (role) {
             case 'Assistant Producer':
@@ -695,7 +723,7 @@ var writeMetadata = (malSeries, malEpisodeInformation, title, filename, episodeN
             case 'Series Composition':
             case 'Original Creator':
             case 'Theme Song Arrangement':
-              break;
+            case 'Theme Song Performance':
               // Ignore these roles, they don't fit
               break;
             default:
@@ -790,8 +818,3 @@ var getBestVideoFrom9AnimeEpisode = (_9AnimeEpisode) => {
 };
 
 async.eachSeries(config.series, (series, next) => runSeries(series, next, '9anime.to'));
-
-/* Kissanime.search('').then(function (results) {
- var cacheFile = "cache/search.json";
- fs.writeFileSync(cacheFile, JSON.stringify(results));
- }); */

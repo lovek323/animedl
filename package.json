@@ -8,16 +8,12 @@
   },
   "author": "",
   "license": "GPL",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lovek323/animedl"
-  },
   "dependencies": {
     "anime-scraper": "^2.1.2",
     "async": "^2.0.1",
     "cheerio": "^0.22.0",
     "debug": "^2.2.0",
-    "malapi": "lovek323/malapi#episode_aired",
+    "malapi": "git://github.com/lovek323/node-malapi.git#episode_aired",
     "numeral": "^1.5.3",
     "pad": "^1.0.1",
     "progress": "^1.1.8",

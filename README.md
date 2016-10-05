@@ -7,9 +7,14 @@ Create a `config.json`:
 ```json
 {
   "outputDirectory": "",
-  "finalDirectory": "",
-  "seriesIds": [
-    "12345"
+  "moviesFinalDirectory": "",
+  "tvFinalDirectory": "",
+  "series": [
+    {
+      "id": "12345",
+      "_9AnimeTitle": "Test",
+      "kissanimeTitle": "Test"
+    }
   ]
 }
 ```
