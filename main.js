@@ -35,6 +35,10 @@ if (!fs.existsSync('cache/search.json')) {
   return;
 }
 
+const SegfaultHandler = require('segfault-handler');
+//noinspection JSUnresolvedFunction
+SegfaultHandler.registerHandler('crash.log');
+
 var kissanimeSeries = require('./cache/search.json');
 
 var runSeries = function (series, nextSeries) {

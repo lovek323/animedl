@@ -11,6 +11,7 @@ const fs = require('fs');
 const numeral = require('numeral');
 const progress = require('request-progress');
 const shellescape = require('shell-escape');
+const syncrequest = require('sync-request');
 const request = require('request');
 const utils = require('./utils.js');
 
@@ -34,8 +35,9 @@ class Provider {
       return;
     }
 
-    var finalFilename = episode.getFinalFilename();
-    var video = episode.providerEpisode.getVideo();
+    const finalFilename = episode.getFinalFilename();
+    const video = episode.providerEpisode.getVideo();
+    const jpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
 
     if (anime.isMovie()) {
       console.log('Downloading ' + anime.getTitle() + ' (' + video.resolution + 'p) to ' + finalFilename);
@@ -44,18 +46,19 @@ class Provider {
         video.resolution + 'p) to ' + finalFilename);
     }
 
-    var temporaryJpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
-    if (!fs.existsSync(temporaryJpgFilename)) {
-      var jpgFile = fs.createWriteStream(temporaryJpgFilename);
-      jpgFile.on(
-        'finish',
-        () => this.downloadAndWriteMetadata(anime, episode, video, callback)
-      );
+    if (!fs.existsSync(jpgFilename)) {
       //noinspection JSUnresolvedFunction
-      request({url: anime.imageUrl, method: 'GET', followAllRedirects: true}).pipe(jpgFile);
-    } else {
-      this.downloadAndWriteMetadata(anime, episode, video, callback);
+      const response = syncrequest('GET', anime.imageUrl);
+      //noinspection JSUnresolvedVariable
+      const contentLength = parseInt(response.headers['content-length']);
+      fs.writeFileSync(jpgFilename, response.body, 'binary');
+      const stat = fs.statSync(jpgFilename);
+      if (stat.size != contentLength) {
+        throw new Error('Could not download JPG');
+      }
     }
+
+    this.downloadAndWriteMetadata(anime, episode, video, callback);
   }
 
   /**
@@ -66,7 +69,6 @@ class Provider {
    */
   downloadAndWriteMetadata(anime, episode, video, callback) {
     var temporaryMp4Filename = utils.getTemporaryFilename(anime, episode, 'mp4');
-
     if (!fs.existsSync(temporaryMp4Filename)) {
       this.downloadVideo(anime, episode, video, callback);
     } else {
@@ -156,6 +158,8 @@ class Provider {
         throw new Error('Unrecognised classification: ' + anime.classification);
     }
 
+    const jpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
+
     var args = [
       'AtomicParsley',
       filename,
@@ -163,7 +167,7 @@ class Provider {
       '--genre',
       genre,
       '--artwork',
-      utils.getTemporaryFilename(anime, episode, 'jpg'),
+      jpgFilename,
       '--longdesc',
       synopsis,
       '--storedesc',
@@ -207,11 +211,24 @@ class Provider {
 
     debugTrace(args);
 
-    exec(shellescape(args), error => {
+    exec(shellescape(args), (error, stdout, stderr) => {
       if (error) {
-        console.log(error);
-        debug(error);
-        process.exit(2);
+        if (stderr.includes('could not be loaded')) {
+          fs.unlinkSync(jpgFilename);
+          console.log(jpgFilename + ' is not a valid JPEG');
+          process.exit(1);
+          return;
+        }
+        if (stdout.includes('APar_readX read failed')) {
+          fs.unlinkSync(filename);
+          console.log(jpgFilename + ' is not a valid MP4');
+          process.exit(1);
+          return;
+        }
+        process.stdout.write(error + "\n");
+        process.stdout.write(stdout + "\n");
+        process.stdout.write(stderr + "\n");
+        process.exit(1);
         return;
       }
 
@@ -263,6 +280,7 @@ class Provider {
             case 'Key Animation':
             case 'Music':
             case 'Series Composition':
+            case 'Original Character Design':
             case 'Original Creator':
             case 'Theme Song Arrangement':
             case 'Theme Song Performance':
@@ -318,6 +336,7 @@ class _9AnimeProvider extends Provider {
     utils.cachedRequest(
       'http://9anime.to/ajax/film/search?sort=year%3Adesc&keyword=' + encodeURIComponent(anime.providerTitle),
       (error, response, body) => {
+        //noinspection ES6ModulesDependencies,NodeModulesDependencies
         body = JSON.parse(body);
         var $ = cheerio.load(body.html);
         var found = false;
@@ -399,6 +418,7 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
       this.url,
       (error, response, body) => {
         try {
+          //noinspection ES6ModulesDependencies,NodeModulesDependencies
           body = JSON.parse(body);
         } catch (error) {
           if (body.includes('The web server reported a gateway time-out error.')) {
@@ -418,6 +438,7 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
 
         request(grabberUrl, (error, response, body) => {
             try {
+              //noinspection ES6ModulesDependencies,NodeModulesDependencies
               body = JSON.parse(body);
             } catch (error) {
               if (body.includes('The web server reported a gateway time-out error.')) {

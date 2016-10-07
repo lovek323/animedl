@@ -1,3 +1,5 @@
+'use strict';
+
 class AnimeConfig {
 
   constructor(id, provider, _9AnimeTitle, kissanimeTitle) {

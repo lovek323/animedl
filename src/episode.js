@@ -1,3 +1,5 @@
+'use strict';
+
 const config = require('../config.json');
 const fs = require('fs');
 const glob = require('glob');
@@ -21,11 +23,15 @@ class Episode {
       this.number = malEpisode.number;
       this.synopsis = malEpisode.synopsis;
 
-      this.aired = malEpisode.aired;
-      if (typeof this.aired === 'object') {
-        this.aired = malEpisode.aired.toISOString();
+      if (typeof malEpisode.aired !== 'undefined') {
+        this.aired = malEpisode.aired;
+        if (typeof this.aired === 'object') {
+          this.aired = malEpisode.aired.toISOString();
+        }
+        this.aired = this.aired.replace('.000', '');
+      } else {
+        this.aired = anime.aired;
       }
-      this.aired = this.aired.replace('.000', '');
     } else {
       this.name = 'Episode ' + number;
       this.number = number;
