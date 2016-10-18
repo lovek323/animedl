@@ -3,7 +3,6 @@ const ProgressBar = require('progress');
 
 const async = require('async');
 const cheerio = require('cheerio');
-const deasync = require('deasync');
 const debug = require('debug')('animedl');
 const debugTrace = require('debug')('animedl-trace');
 const exec = require('child_process').exec;
@@ -36,29 +35,30 @@ class Provider {
     }
 
     const finalFilename = episode.getFinalFilename();
-    const video = episode.providerEpisode.getVideo();
     const jpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
 
-    if (anime.isMovie()) {
-      console.log('Downloading ' + anime.getTitle() + ' (' + video.resolution + 'p) to ' + finalFilename);
-    } else {
-      console.log('Downloading ' + anime.getTitle() + ' - ' + episode.number + ' - ' + episode.name + ' (' +
-        video.resolution + 'p) to ' + finalFilename);
-    }
-
-    if (!fs.existsSync(jpgFilename)) {
-      //noinspection JSUnresolvedFunction
-      const response = syncrequest('GET', anime.imageUrl);
-      //noinspection JSUnresolvedVariable
-      const contentLength = parseInt(response.headers['content-length']);
-      fs.writeFileSync(jpgFilename, response.body, 'binary');
-      const stat = fs.statSync(jpgFilename);
-      if (stat.size != contentLength) {
-        throw new Error('Could not download JPG');
+    episode.providerEpisode.getVideo(video => {
+      if (anime.isMovie()) {
+        console.log('Downloading ' + anime.getTitle() + ' (' + video.resolution + 'p) to ' + finalFilename);
+      } else {
+        console.log('Downloading ' + anime.getTitle() + ' - ' + episode.number + ' - ' + episode.name + ' (' +
+          video.resolution + 'p) to ' + finalFilename);
       }
-    }
 
-    this.downloadAndWriteMetadata(anime, episode, video, callback);
+      if (!fs.existsSync(jpgFilename)) {
+        //noinspection JSUnresolvedFunction
+        const response = syncrequest('GET', anime.imageUrl);
+        //noinspection JSUnresolvedVariable
+        const contentLength = parseInt(response.headers['content-length']);
+        fs.writeFileSync(jpgFilename, response.body, 'binary');
+        const stat = fs.statSync(jpgFilename);
+        if (stat.size != contentLength) {
+          throw new Error('Could not download JPG');
+        }
+      }
+
+      this.downloadAndWriteMetadata(anime, episode, video, callback);
+    });
   }
 
   /**
@@ -148,6 +148,7 @@ class Provider {
         contentRating = 'PG-13';
         break;
       case 'R - 17+ (violence & profanity)':
+      case 'R+ - Mild Nudity':
         contentRating = 'R';
         break;
       case 'None':
@@ -239,7 +240,12 @@ class Provider {
           return;
         }
         var match = character.actor.match(/(.*), (.*)/);
-        var actor = match[2] + ' ' + match[1];
+        var actor;
+        if (match === null) {
+          actor = character.actor;
+        } else {
+          actor = match[2] + ' ' + match[1];
+        }
         args.push('--cast');
         args.push(actor);
       });
@@ -283,6 +289,8 @@ class Provider {
             case 'Original Character Design':
             case 'Original Creator':
             case 'Theme Song Arrangement':
+            case 'Theme Song Composition':
+            case 'Theme Song Lyrics':
             case 'Theme Song Performance':
               // Ignore these roles, they don't fit
               break;
@@ -407,12 +415,12 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
     this.video = null;
   }
 
-  getVideo() {
+  getVideo(callback) {
     if (this.video !== null) {
-      return this.video;
+      callback(this.video);
+      return;
     }
 
-    var done = false;
     var self = this;
     request(
       this.url,
@@ -423,7 +431,7 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
         } catch (error) {
           if (body.includes('The web server reported a gateway time-out error.')) {
             debug('Gateway time-out error. Waiting 5 seconds.');
-            setTimeout(this.getVideo, 5000);
+            setTimeout(() => self.getVideo(callback), 5000);
             return;
           }
 
@@ -443,7 +451,7 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
             } catch (error) {
               if (body.includes('The web server reported a gateway time-out error.')) {
                 debug('Gateway time-out error. Waiting 5 seconds.');
-                setTimeout(this.getVideo, 5000);
+                setTimeout(() => self.getVideo(callback), 5000);
                 return;
               }
 
@@ -483,15 +491,11 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
             }
 
             self.video = {url: bestLink, resolution: bestResolution};
-            done = true;
+            callback(self.video);
           }
         );
       }
     );
-
-    deasync.loopWhile(() => !done);
-
-    return self.video;
   }
 
 }
