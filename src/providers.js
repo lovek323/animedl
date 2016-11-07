@@ -276,6 +276,9 @@ class Provider {
               args.push('--screenwriters');
               args.push(name);
               break;
+            case 'ADR Director':
+            case 'Animation Director':
+            case 'Chief Animation Director':
             case 'Episode Director':
             case 'Sound Director':
               args.push('--codirectors');
@@ -283,6 +286,7 @@ class Provider {
               break;
             case '2nd Key Animation':
             case 'Background Art':
+            case 'Character Design':
             case 'Key Animation':
             case 'Music':
             case 'Series Composition':

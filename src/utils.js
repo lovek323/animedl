@@ -23,7 +23,7 @@ var cachedRequest = (url, callback) => {
 
 var sanitise = string => {
   //noinspection JSUnresolvedFunction
-  return string.replaceAll('"', '_').replaceAll(':', '_');
+  return string.replaceAll('"', '_').replaceAll(':', '_').replaceAll('/', '_');
 };
 
 var getItunesAutoAddFilename = () => {
