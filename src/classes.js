@@ -2,11 +2,11 @@
 
 class AnimeConfig {
 
-  constructor(id, provider, _9AnimeTitle, kissanimeTitle) {
-    this.id = id;
-    this.provider = provider;
-    this._9AnimeTitle = _9AnimeTitle;
+  constructor(id, aniDbId, kissanimeTitle, providerEpisodes) {
+    this.aniDbId = aniDbId;
     this.kissanimeTitle = kissanimeTitle;
+    this.providerEpisodeRanges = providerEpisodes;
+    this.malId = id;
   }
 
 }

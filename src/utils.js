@@ -23,11 +23,7 @@ var cachedRequest = (url, callback) => {
 
 var sanitise = string => {
   //noinspection JSUnresolvedFunction
-  return string.replaceAll('"', '_').replaceAll(':', '_').replaceAll('/', '_');
-};
-
-var getItunesAutoAddFilename = () => {
-  return config.outputDirectory + '/episode.mp4';
+  return string.replaceAll('"', '_').replaceAll(':', '_').replaceAll('/', '_').replaceAll('\\?', '_');
 };
 
 /**
@@ -47,4 +43,4 @@ var getTemporaryFilename = (anime, episode, extension) => {
   return filename.replaceAll("'", '_');
 };
 
-module.exports = {cachedRequest, sanitise, getTemporaryFilename, getItunesAutoAddFilename};
+module.exports = {cachedRequest, sanitise, getTemporaryFilename};
