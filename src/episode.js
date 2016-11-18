@@ -3,6 +3,7 @@
 const config = require('../config.json');
 const fs = require('fs');
 const glob = require('glob');
+const mkdirp = require('mkdirp');
 const pad = require('pad');
 const utils = require('./utils.js');
 
@@ -65,7 +66,7 @@ class Episode {
     return sanitisedAnimeTitle;
   }
 
-  getFinalFilename() {
+  getPath() {
     var path = '';
 
     //noinspection JSUnresolvedVariable
@@ -96,9 +97,14 @@ class Episode {
           break;
       }
 
-      path = season + '/' + dateMatch[1] + '/';
+      path = dateMatch[1] + '/' + season + '/';
     }
 
+    return path;
+  }
+
+  getFinalFilename() {
+    var path = this.getPath();
     var sanitisedAnimeTitle = this.getFilenameSeriesTitle();
     var paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
     var sanitisedEpisodeName = utils.sanitise(this.name);
@@ -113,21 +119,22 @@ class Episode {
   }
 
   getActualFilename() {
+    var path = this.getPath();
     var sanitisedAnimeTitle = this.getFilenameSeriesTitle();
     var paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
-
-    if (!fs.existsSync(config.tvFinalDirectory + '/' + sanitisedAnimeTitle)) {
-      fs.mkdirSync(config.tvFinalDirectory + '/' + sanitisedAnimeTitle);
-    }
 
     var pattern;
 
     if (this.anime.isMovie()) {
-      pattern = config.moviesFinalDirectory + '/' + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' \\(' + this.format +
-        '\\).mp4';
+      pattern = config.moviesFinalDirectory + '/' + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' \\(' +
+        this.format + '\\).mp4';
     } else {
-      pattern = config.tvFinalDirectory + '/' + sanitisedAnimeTitle + '/' + paddedEpisodeNumber + '*\\(' + this.format +
-        '\\).mp4';
+      if (!fs.existsSync(config.tvFinalDirectory + '/' + path + sanitisedAnimeTitle)) {
+        mkdirp(config.tvFinalDirectory + '/' + path + sanitisedAnimeTitle);
+      }
+
+      pattern = config.tvFinalDirectory + '/' + path + sanitisedAnimeTitle + '/' + paddedEpisodeNumber + '*\\(' +
+        this.format + '\\).mp4';
     }
 
     var results = glob.sync(pattern);
