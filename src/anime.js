@@ -39,14 +39,14 @@ class Anime {
   }
 
   getMalData() {
-    var cacheFile = 'cache/mal-' + this.malId + '.json';
+    const cacheFile = 'cache/mal-' + this.malId + '.json';
 
     if (fs.existsSync(cacheFile)) {
-      var stat = fs.statSync(cacheFile);
-      var mtime = new Date(util.inspect(stat.mtime));
-      var yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
+      const stat = fs.statSync(cacheFile);
+      const mtime = new Date(util.inspect(stat.mtime));
+      const yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
       if (mtime > yesterday) {
-        var cacheObject = require('../' + cacheFile);
+        const cacheObject = require('../' + cacheFile);
         this.malSeries = cacheObject.malSeries;
         this.aniDbEpisodes = cacheObject.aniDbEpisodes;
         return;
@@ -55,8 +55,9 @@ class Anime {
 
     console.log('Fetching series from MAL with ID ' + this.malId);
 
-    var done = false;
-    var self = this;
+    let done = false;
+    const self = this;
+
     MyAnimeList.fromId(this.malId).then(function (malSeries) {
       self.malSeries = malSeries;
 
@@ -68,7 +69,7 @@ class Anime {
             next();
           });
         }, () => {
-          var cacheObject = {malSeries: self.malSeries, malEpisodes: self.aniDbEpisodes};
+          const cacheObject = {malSeries: self.malSeries, malEpisodes: self.aniDbEpisodes};
           //noinspection ES6ModulesDependencies,NodeModulesDependencies
           fs.writeFileSync(cacheFile, JSON.stringify(cacheObject));
           done = true;
@@ -81,14 +82,14 @@ class Anime {
   }
 
   getAniDbData() {
-    var cacheFile = 'cache/anidb-' + this.aniDbId + '.json';
-    var cache = {};
-    var done = false;
+    const cacheFile = 'cache/anidb-' + this.aniDbId + '.json';
+    const cache = {};
+    let done = false;
 
     if (fs.existsSync(cacheFile)) {
-      var stat = fs.statSync(cacheFile);
-      var mtime = new Date(util.inspect(stat.mtime));
-      var yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
+      const stat = fs.statSync(cacheFile);
+      const mtime = new Date(util.inspect(stat.mtime));
+      const yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
       if (mtime > yesterday) {
         cache.result = require('../' + cacheFile);
         done = true;
@@ -98,7 +99,7 @@ class Anime {
     if (!done) {
       console.log('Fetching series from AniDB with ID ' + this.aniDbId);
 
-      var aniDbUrl = 'http://api.anidb.net:9001/httpapi?request=anime&client=animdl&clientver=1&protover=1&aid=' +
+      const aniDbUrl = 'http://api.anidb.net:9001/httpapi?request=anime&client=animdl&clientver=1&protover=1&aid=' +
         this.aniDbId;
       request({uri: aniDbUrl, gzip: true}, (error, response, body) => {
         parseString(body, function (error, result) {
@@ -120,13 +121,13 @@ class Anime {
   }
 
   getProviderData() {
-    var done;
-    var self = this;
+    let done;
+    const self = this;
 
     this.providerEpisodeRanges.forEach(function (providerEpisodeRange) {
-      var isSpecial = false;
-      var start = providerEpisodeRange.start;
-      var proceed = true;
+      let isSpecial = false;
+      let start = providerEpisodeRange.start;
+      let proceed = true;
       if (/^S[0-9]+$/.test(start)) {
         // We're dealing with a special
         start = start.substr(1);
@@ -145,7 +146,7 @@ class Anime {
       if (proceed) {
         // We're dealing with a normal episode
         start = parseInt(start);
-        var provider;
+        let provider;
         //noinspection JSUnresolvedVariable
         switch (providerEpisodeRange.provider) {
           case "9anime.to":
@@ -161,12 +162,12 @@ class Anime {
 
         //noinspection JSUnresolvedVariable
         provider.getEpisodes(self, providerEpisodeRange.providerId, (providerEpisodes) => {
-          for (var i = 0; i < providerEpisodes.length; i++) {
-            var providerEpisode = providerEpisodes[i];
-            var aniDbEpisode = null;
-            for (var j = 0; j < self.aniDbEpisodes.length; j++) {
+          for (let i = 0; i < providerEpisodes.length; i++) {
+            const providerEpisode = providerEpisodes[i];
+            let aniDbEpisode = null;
+            for (let j = 0; j < self.aniDbEpisodes.length; j++) {
               //noinspection JSUnresolvedVariable
-              var episodeNumber = self.aniDbEpisodes[j].epno[0]['_'];
+              let episodeNumber = self.aniDbEpisodes[j].epno[0]['_'];
               if (/^S[0-9]+/.test(episodeNumber)) {
                 // We're dealing with a special
                 if (!isSpecial) continue;
@@ -244,7 +245,7 @@ class Anime {
   }
 
   getTitle() {
-    var englishTitle = null;
+    let englishTitle = null;
     //noinspection JSUnresolvedVariable
     this.aniDbAnime.titles[0].title.forEach(function (title) {
       if (title['$']['xml:lang'] === 'en') {

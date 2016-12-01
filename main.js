@@ -15,14 +15,14 @@ const util = require('util');
 const debug = require('debug')('animedl');
 
 String.prototype.replaceAll = function (search, replacement) {
-  var target = this;
+  const target = this;
   return target.replace(new RegExp(search, 'g'), replacement);
 };
 
 if (!fs.existsSync('cache/search.json')) {
   console.log('Downloading kissanime search cache');
   Kissanime.search('').then(function (results) {
-    var cacheFile = "cache/search.json";
+    const cacheFile = "cache/search.json";
     //noinspection ES6ModulesDependencies,NodeModulesDependencies
     fs.writeFileSync(cacheFile, JSON.stringify(results));
   });
@@ -33,20 +33,11 @@ const SegfaultHandler = require('segfault-handler');
 //noinspection JSUnresolvedFunction
 SegfaultHandler.registerHandler('crash.log');
 
-var runSeries = function (series, nextSeries) {
-  if (series.finished) {
-    nextSeries();
-    return;
-  }
-
-  fetchSeries(new Anime(series), nextSeries);
-};
-
 /**
  * @param {Anime} anime
  * @param callback
  */
-var fetchSeries = (anime, callback) => {
+const fetchSeries = (anime, callback) => {
   // Download each episode or, if we're dealing with a movie, the movie
   if (anime.isMovie()) {
     console.log('welp');
@@ -58,6 +49,16 @@ var fetchSeries = (anime, callback) => {
     );
   }
 };
+
+const runSeries = function (series, nextSeries) {
+  if (series.finished) {
+    nextSeries();
+    return;
+  }
+
+  fetchSeries(new Anime(series), nextSeries);
+};
+
 
 //noinspection JSUnusedLocalSymbols
 /* var fetchKissanime = (title, malSeries, malEpisodeInformations, nextSeries) => {

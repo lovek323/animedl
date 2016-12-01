@@ -32,7 +32,7 @@ class Episode {
 
     if (aniDbEpisode !== null) {
       this.title = null;
-      var self = this;
+      const self = this;
       aniDbEpisode.title.forEach(function (title) {
         if (title['$']['xml:lang'] === 'en') {
           self.name = title['_'];
@@ -61,19 +61,17 @@ class Episode {
   }
 
   getFilenameSeriesTitle() {
-    //noinspection JSUnresolvedVariable
-    var sanitisedAnimeTitle = utils.sanitise(this.anime.getTitle());
-    return sanitisedAnimeTitle;
+    return utils.sanitise(this.anime.getTitle());
   }
 
   getPath() {
-    var path = '';
+    let path = '';
 
     //noinspection JSUnresolvedVariable
-    var dateMatch = this.anime.aniDbAnime.startdate[0].match(/^([0-9]{4})-([0-9]{2})/);
+    const dateMatch = this.anime.aniDbAnime.startdate[0].match(/^([0-9]{4})-([0-9]{2})/);
 
     if (dateMatch) {
-      var season;
+      let season;
       switch (dateMatch[2]) {
         case '01':
         case '02':
@@ -104,10 +102,10 @@ class Episode {
   }
 
   getFinalFilename() {
-    var path = this.getPath();
-    var sanitisedAnimeTitle = this.getFilenameSeriesTitle();
-    var paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
-    var sanitisedEpisodeName = utils.sanitise(this.name);
+    const path = this.getPath();
+    const sanitisedAnimeTitle = this.getFilenameSeriesTitle();
+    const paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
+    const sanitisedEpisodeName = utils.sanitise(this.name);
 
     if (this.anime.isMovie()) {
       return config.moviesFinalDirectory + '/' + path + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' (' +
@@ -119,11 +117,11 @@ class Episode {
   }
 
   getActualFilename() {
-    var path = this.getPath();
-    var sanitisedAnimeTitle = this.getFilenameSeriesTitle();
-    var paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
+    const path = this.getPath();
+    const sanitisedAnimeTitle = this.getFilenameSeriesTitle();
+    const paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
 
-    var pattern;
+    let pattern;
 
     if (this.anime.isMovie()) {
       pattern = config.moviesFinalDirectory + '/' + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' \\(' +
@@ -137,7 +135,7 @@ class Episode {
         this.format + '\\).mp4';
     }
 
-    var results = glob.sync(pattern);
+    const results = glob.sync(pattern);
     if (results.length === 0) {
       return null;
     }
