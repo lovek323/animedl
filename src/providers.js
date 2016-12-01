@@ -40,9 +40,12 @@ class Provider {
     const jpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
 
     episode.providerEpisode.getVideo(video => {
+      //noinspection JSUnresolvedFunction
       if (anime.isMovie()) {
+        //noinspection JSUnresolvedFunction
         console.log('Downloading ' + anime.getTitle() + ' (' + video.resolution + 'p) to ' + finalFilename);
       } else {
+        //noinspection JSUnresolvedFunction
         console.log('Downloading ' + anime.getTitle() + ' - ' + episode.number + ' - ' + episode.name + ' (' +
           video.resolution + 'p) to ' + finalFilename);
       }
@@ -52,6 +55,7 @@ class Provider {
         const response = syncrequest('GET', anime.imageUrl);
         //noinspection JSUnresolvedVariable
         const contentLength = parseInt(response.headers['content-length']);
+        //noinspection JSUnresolvedVariable
         fs.writeFileSync(jpgFilename, response.body, 'binary');
         const stat = fs.statSync(jpgFilename);
         if (stat.size != contentLength) {
@@ -70,7 +74,7 @@ class Provider {
    * @param callback
    */
   downloadAndWriteMetadata(anime, episode, video, callback) {
-    var temporaryMp4Filename = utils.getTemporaryFilename(anime, episode, 'mp4');
+    const temporaryMp4Filename = utils.getTemporaryFilename(anime, episode, 'mp4');
     if (!fs.existsSync(temporaryMp4Filename)) {
       this.downloadVideo(anime, episode, video, callback);
     } else {
@@ -84,7 +88,7 @@ class Provider {
 
   downloadVideo(anime, episode, video, callback) {
     //noinspection JSUnresolvedFunction
-    var bar = new ProgressBar(
+    const bar = new ProgressBar(
       '[:bar] :bytesTransferred/:bytesTotal :percent :speed/s :remainingTime remaining',
       {
         bytesTransferred: '',
@@ -95,9 +99,9 @@ class Provider {
       }
     );
 
-    var self = this;
-    var temporaryFilename = utils.getTemporaryFilename(anime, episode, 'mp4');
-    var mp4File = fs.createWriteStream(temporaryFilename);
+    const self = this;
+    const temporaryFilename = utils.getTemporaryFilename(anime, episode, 'mp4');
+    const mp4File = fs.createWriteStream(temporaryFilename);
     mp4File.on('finish', () => {
       if (bar.curr < 90) {
         fs.unlinkSync(temporaryFilename);
@@ -137,9 +141,9 @@ class Provider {
    * @param callback
    */
   writeMetadata(anime, episode, filename, callback) {
-    var synopsis = episode.synopsis;
-    var genre = anime.genres[0];
-    var contentRating = '';
+    const synopsis = episode.synopsis;
+    const genre = anime.genres[0];
+    let contentRating = '';
 
     //noinspection JSUnresolvedVariable
     switch (anime.classification) {
@@ -163,36 +167,37 @@ class Provider {
 
     const jpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
 
-    var args = [
+    let args = [
       'AtomicParsley',
       filename,
       '--overWrite',
       '--genre',
       genre,
-      '--longdesc',
-      synopsis,
       '--storedesc',
       anime.synopsis,
       '--grouping',
       anime.type
     ];
 
+    if (synopsis) {
+      args.push('--longdesc', synopsis);
+    }
+
     if (fs.existsSync(jpgFilename)) {
-      args.push('--artwork');
-      args.push(jpgFilename);
+      args.push('--artwork', jpgFilename);
     }
 
     if (contentRating !== null) {
-      args.push('--contentRating');
-      args.push(contentRating);
+      args.push('--contentRating', contentRating);
     }
 
     if (episode.aired !== null) {
-      args.push('--year');
-      args.push(episode.aired);
+      args.push('--year', episode.aired);
     }
 
+    //noinspection JSUnresolvedFunction
     if (anime.isMovie()) {
+      //noinspection JSUnresolvedFunction
       args = args.concat([
         '--stik',
         'Movie',
@@ -201,6 +206,7 @@ class Provider {
       ]);
     } else {
       // Treat this as a TV series
+      //noinspection JSUnresolvedFunction
       args = args.concat([
         '--stik',
         'TV Show',
@@ -244,8 +250,8 @@ class Provider {
           // We are adding actors, not characters and Japanese voice actors not English dub actors
           return;
         }
-        var match = character.actor.match(/(.*), (.*)/);
-        var actor;
+        const match = character.actor.match(/(.*), (.*)/);
+        let actor;
         if (match === null) {
           actor = character.actor;
         } else {
@@ -255,8 +261,8 @@ class Provider {
         args.push(actor);
       });
       anime.staff.forEach(staff => {
-        var match = staff.name.match(/(.*), (.*)/);
-        var name;
+        const match = staff.name.match(/(.*), (.*)/);
+        let name;
         if (match === null) {
           // Handle single names like 'nano'
           name = staff.name;
@@ -347,49 +353,49 @@ class _9AnimeProvider extends Provider {
    * @param callback
    */
   getEpisodes(anime, providerId, callback) {
-    var episodes = [];
+    const episodes = [];
 
+    //noinspection JSUnresolvedFunction
     console.log('Fetching series from 9anime.to: ' + anime.getTitle());
 
     utils.cachedRequest('http://9anime.to/watch/_.' + providerId, (error, response, body) => {
-      var $ = cheerio.load(body);
-      var _9AnimeEpisodes = {};
-      $("ul.episodes a").each((index, element) => {
-        var id = $(element).data("id");
-        var name = $(element).text();
-        if (typeof _9AnimeEpisodes[name] === 'undefined') {
-          _9AnimeEpisodes[name] = [];
-        }
-        _9AnimeEpisodes[name].push(id);
-      });
+        const $ = cheerio.load(body);
+        const _9AnimeEpisodes = {};
+        $("ul.episodes a").each((index, element) => {
+          const id = $(element).data("id");
+          const name = $(element).text();
+          if (typeof _9AnimeEpisodes[name] === 'undefined') {
+            _9AnimeEpisodes[name] = [];
+          }
+          _9AnimeEpisodes[name].push(id);
+        });
 
-      async.eachSeries(Object.keys(_9AnimeEpisodes), (_9AnimeEpisode, nextEpisode) => {
-        var _9AnimeEpisodeId = _9AnimeEpisodes[_9AnimeEpisode][0];
-        var _9AnimeEpisodeNumberMatch = _9AnimeEpisode.match(/^([0-9]+)/);
-        var _9AnimeEpisodeNumber = 0;
+        async.eachSeries(Object.keys(_9AnimeEpisodes), (_9AnimeEpisode, nextEpisode) => {
+          const _9AnimeEpisodeId = _9AnimeEpisodes[_9AnimeEpisode][0];
+          const _9AnimeEpisodeNumberMatch = _9AnimeEpisode.match(/^([0-9]+)/);
+          let _9AnimeEpisodeNumber = 0;
 
-        if (_9AnimeEpisodeNumberMatch !== null) {
-          _9AnimeEpisodeNumber = parseInt(_9AnimeEpisodeNumberMatch[0]);
-        }
+          if (_9AnimeEpisodeNumberMatch !== null) {
+            _9AnimeEpisodeNumber = parseInt(_9AnimeEpisodeNumberMatch[0]);
+          }
 
-        debugTrace('Processing 9anime.to episode ' + _9AnimeEpisodeNumber);
+          debugTrace('Processing 9anime.to episode ' + _9AnimeEpisodeNumber);
 
-        /* if (new Episode(anime, null, _9AnimeEpisode, _9AnimeEpisodeNumber).fileExists()) {
-         if (anime.isMovie()) {
-         debug('Skipping ' + this.anime.getTitle());
-         } else {
-         debug('Skipping _9AnimeEpisode ' + _9AnimeEpisodeNumber);
-         }
-         nextEpisode();
-         return;
-         } */
+          /* if (new Episode(anime, null, _9AnimeEpisode, _9AnimeEpisodeNumber).fileExists()) {
+           if (anime.isMovie()) {
+           debug('Skipping ' + this.anime.getTitle());
+           } else {
+           debug('Skipping _9AnimeEpisode ' + _9AnimeEpisodeNumber);
+           }
+           nextEpisode();
+           return;
+           } */
 
-        var url = 'http://9anime.to/ajax/episode/info?id=' + _9AnimeEpisodeId + '&update=1&film=' + providerId;
-        episodes.push(new _9AnimeProviderEpisode(_9AnimeEpisodeNumber, _9AnimeEpisodeId, url));
-        nextEpisode();
-      }, () => callback(episodes));
-    }
-
+          const url = 'http://9anime.to/ajax/episode/info?id=' + _9AnimeEpisodeId + '&update=1&film=' + providerId;
+          episodes.push(new _9AnimeProviderEpisode(_9AnimeEpisodeNumber, _9AnimeEpisodeId, url));
+          nextEpisode();
+        }, () => callback(episodes));
+      }
     );
   };
 
@@ -411,7 +417,7 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
       return;
     }
 
-    var self = this;
+    const self = this;
     request(
       this.url,
       (error, response, body) => {
@@ -431,7 +437,7 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
         }
 
         //noinspection JSUnresolvedVariable
-        var grabberUrl = body.grabber + '?malId=' + this.malId + '&token=' + encodeURIComponent(body.params.token) +
+        const grabberUrl = body.grabber + '?malId=' + this.malId + '&token=' + encodeURIComponent(body.params.token) +
           '&options=' + encodeURIComponent(body.params.options) + '&mobile=0';
 
         request(grabberUrl, (error, response, body) => {
@@ -451,12 +457,12 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
               return;
             }
 
-            var bestLink = null;
-            var bestResolution = 0;
+            let bestLink = null;
+            let bestResolution = 0;
 
-            for (var k = 0; k < body.data.length; k++) {
-              var video = body.data[k];
-              var resolution = 0;
+            for (let k = 0; k < body.data.length; k++) {
+              const video = body.data[k];
+              let resolution = 0;
               switch (video.label) {
                 case '1080p':
                   resolution = 1080;

@@ -1,15 +1,15 @@
-var config = require('../config.json');
-var fs = require('fs');
-var pad = require('pad');
-var request = require('request');
-var util = require('util');
+const config = require('../config.json');
+const fs = require('fs');
+const pad = require('pad');
+const request = require('request');
+const util = require('util');
 
-var cachedRequest = (url, callback) => {
-  var cacheFile = 'cache/' + new Buffer(url).toString('base64');
+const cachedRequest = (url, callback) => {
+  const cacheFile = 'cache/' + new Buffer(url).toString('base64');
   if (fs.existsSync(cacheFile)) {
-    var stat = fs.statSync(cacheFile);
-    var mtime = new Date(util.inspect(stat.mtime));
-    var yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
+    const stat = fs.statSync(cacheFile);
+    const mtime = new Date(util.inspect(stat.mtime));
+    const yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
     if (mtime > yesterday) {
       callback(null, null, fs.readFileSync(cacheFile));
       return;
@@ -21,7 +21,7 @@ var cachedRequest = (url, callback) => {
   });
 };
 
-var sanitise = string => {
+const sanitise = string => {
   //noinspection JSUnresolvedFunction
   return string.replaceAll('"', '_').replaceAll(':', '_').replaceAll('/', '_').replaceAll('\\?', '_');
 };
@@ -31,9 +31,11 @@ var sanitise = string => {
  * @param {Episode} episode
  * @param extension
  */
-var getTemporaryFilename = (anime, episode, extension) => {
-  var filename;
-  var sanitisedSeriesTitle = sanitise(anime.getTitle());
+const getTemporaryFilename = (anime, episode, extension) => {
+  let filename;
+  //noinspection JSUnresolvedFunction
+  const sanitisedSeriesTitle = sanitise(anime.getTitle());
+  //noinspection JSUnresolvedFunction
   if (anime.isMovie()) {
     filename = 'cache/' + sanitisedSeriesTitle + '.' + extension;
   } else {

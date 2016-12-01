@@ -68,34 +68,38 @@ class Episode {
     let path = '';
 
     //noinspection JSUnresolvedVariable
-    const dateMatch = this.anime.aniDbAnime.startdate[0].match(/^([0-9]{4})-([0-9]{2})/);
+    const dateMatch = this.anime.malSeries.aired.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Oct|Nov|Dec) [0-9]+, ([0-9]{4}) to /);
+
+    if (!dateMatch) {
+      throw new Error("Could not parse date: " + this.anime.malSeries.aired);
+    }
 
     if (dateMatch) {
       let season;
-      switch (dateMatch[2]) {
-        case '01':
-        case '02':
-        case '03':
+      switch (dateMatch[1]) {
+        case 'Jan':
+        case 'Feb':
+        case 'Mar':
           season = '1-Winter';
           break;
-        case '04':
-        case '05':
-        case '06':
+        case 'Apr':
+        case 'May':
+        case 'Jun':
           season = '2-Spring';
           break;
-        case '07':
-        case '08':
-        case '09':
+        case 'Jul':
+        case 'Aug':
+        case 'Sep':
           season = '3-Summer';
           break;
-        case '10':
-        case '11':
-        case '12':
+        case 'Oct':
+        case 'Nov':
+        case 'Dec':
           season = '4-Autumn';
           break;
       }
 
-      path = dateMatch[1] + '/' + season + '/';
+      path = dateMatch[2] + '/' + season + '/';
     }
 
     return path;
