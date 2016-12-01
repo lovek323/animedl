@@ -27,7 +27,7 @@ class Episode {
     this.format = format;
 
     if (malEpisode !== null) {
-      this.synopsis = aniDbEpisode.synopsis;
+      this.synopsis = malEpisode.synopsis;
     }
 
     if (aniDbEpisode !== null) {
@@ -61,6 +61,7 @@ class Episode {
   }
 
   getFilenameSeriesTitle() {
+    //noinspection JSUnresolvedFunction
     return utils.sanitise(this.anime.getTitle());
   }
 
@@ -111,6 +112,7 @@ class Episode {
     const paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
     const sanitisedEpisodeName = utils.sanitise(this.name);
 
+    //noinspection JSUnresolvedFunction
     if (this.anime.isMovie()) {
       return config.moviesFinalDirectory + '/' + path + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' (' +
         this.format + ').mp4';
@@ -127,6 +129,7 @@ class Episode {
 
     let pattern;
 
+    //noinspection JSUnresolvedFunction
     if (this.anime.isMovie()) {
       pattern = config.moviesFinalDirectory + '/' + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' \\(' +
         this.format + '\\).mp4';

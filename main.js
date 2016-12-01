@@ -56,7 +56,9 @@ const runSeries = function (series, nextSeries) {
     return;
   }
 
-  fetchSeries(new Anime(series), nextSeries);
+  Anime.get(series, anime => {
+    fetchSeries(anime, nextSeries)
+  });
 };
 
 

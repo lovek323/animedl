@@ -31,8 +31,7 @@ class Provider {
    */
   downloadEpisode(anime, episode, callback) {
     if (episode.fileExists()) {
-      // this.writeMetadata(anime, episode, episode.getActualFilename(), callback);
-      callback();
+      this.writeMetadata(anime, episode, episode.getActualFilename(), callback);
       return;
     }
 
@@ -141,7 +140,7 @@ class Provider {
    * @param callback
    */
   writeMetadata(anime, episode, filename, callback) {
-    const synopsis = episode.synopsis;
+    const episodeSynopsis = episode.synopsis;
     const genre = anime.genres[0];
     let contentRating = '';
 
@@ -173,14 +172,20 @@ class Provider {
       '--overWrite',
       '--genre',
       genre,
-      '--storedesc',
-      anime.synopsis,
       '--grouping',
       anime.type
     ];
 
-    if (synopsis) {
-      args.push('--longdesc', synopsis);
+    if (anime.synopsis) {
+      let description = anime.synopsis;
+      if (description.length > 255) {
+        description = description.substr(0, 255);
+      }
+      args.push('--description', description);
+    }
+
+    if (episodeSynopsis) {
+      args.push('--longdesc', episodeSynopsis);
     }
 
     if (fs.existsSync(jpgFilename)) {
@@ -233,7 +238,7 @@ class Provider {
         }
         if (stdout.includes('APar_readX read failed')) {
           fs.unlinkSync(filename);
-          console.log(jpgFilename + ' is not a valid MP4');
+          console.log(filename + ' is not a valid MP4');
           process.exit(1);
           return;
         }
@@ -356,7 +361,7 @@ class _9AnimeProvider extends Provider {
     const episodes = [];
 
     //noinspection JSUnresolvedFunction
-    console.log('Fetching series from 9anime.to: ' + anime.getTitle());
+    console.log('Fetching series from 9anime.to (' + providerId + '): ' + anime.getTitle());
 
     utils.cachedRequest('http://9anime.to/watch/_.' + providerId, (error, response, body) => {
         const $ = cheerio.load(body);

@@ -12,7 +12,6 @@
     "anime-scraper": "^2.1.2",
     "async": "^2.0.1",
     "cheerio": "^0.22.0",
-    "deasync": "^0.1.8",
     "debug": "^2.2.0",
     "glob": "^7.1.0",
     "malapi": "git://github.com/lovek323/node-malapi.git#episode_aired",

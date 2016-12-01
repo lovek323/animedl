@@ -2,7 +2,6 @@ const Episode = require('./episode.js');
 const MyAnimeList = require('malapi').Anime;
 
 const async = require('async');
-const deasync = require('deasync');
 const fs = require('fs');
 const parseString = require('xml2js').parseString;
 const providers = require('./providers.js');
@@ -13,32 +12,37 @@ class Anime {
 
   /**
    * @param {AnimeConfig} config
+   * @param callback
    */
-  constructor(config) {
-    this.providerEpisodeRanges = config.providerEpisodeRanges;
-    this.aniDbId = config.aniDbId;
-    this.malId = this.providerEpisodeRanges[0].malId;
-    this.episodes = [];
+  static get(config, callback) {
+    const anime = new Anime();
 
-    this.getMalData();
-    this.getAniDbData();
+    anime.providerEpisodeRanges = config.providerEpisodeRanges;
+    anime.aniDbId = config.aniDbId;
+    anime.malId = anime.providerEpisodeRanges[0].malId;
+    anime.episodes = [];
 
-    //noinspection JSUnresolvedVariable
-    this.aired = this.aniDbAnime.startdate[0];
-    this.characters = this.malSeries.characters;
-    this.classification = this.malSeries.classification;
-    this.genres = this.malSeries.genres;
-    this.imageUrl = this.malSeries.image;
-    this.staff = this.malSeries.staff;
-    this.studios = this.malSeries.studios;
-    this.synopsis = this.malSeries.synopsis;
-    this.type = this.malSeries.type;
-    this.episodeCount = this.aniDbEpisodes.length;
+    anime.getMalData(() => {
+      anime.getAniDbData(() => {
+        //noinspection JSUnresolvedVariable
+        anime.aired = anime.aniDbAnime.startdate[0];
+        anime.characters = anime.malSeries.characters;
+        anime.classification = anime.malSeries.classification;
+        anime.genres = anime.malSeries.genres;
+        anime.imageUrl = anime.malSeries.image;
+        anime.staff = anime.malSeries.staff;
+        anime.studios = anime.malSeries.studios;
+        //noinspection JSUnresolvedVariable
+        anime.synopsis = anime.aniDbAnime.description[0];
+        anime.type = anime.malSeries.type;
+        anime.episodeCount = anime.aniDbEpisodes.length;
 
-    this.getProviderData();
+        anime.getProviderData(() => callback(anime));
+      });
+    });
   }
 
-  getMalData() {
+  getMalData(callback) {
     const cacheFile = 'cache/mal-' + this.malId + '.json';
 
     if (fs.existsSync(cacheFile)) {
@@ -48,43 +52,39 @@ class Anime {
       if (mtime > yesterday) {
         const cacheObject = require('../' + cacheFile);
         this.malSeries = cacheObject.malSeries;
-        this.aniDbEpisodes = cacheObject.aniDbEpisodes;
+        this.malEpisodes = cacheObject.malEpisodes;
+        callback();
         return;
       }
     }
 
     console.log('Fetching series from MAL with ID ' + this.malId);
 
-    let done = false;
     const self = this;
 
     MyAnimeList.fromId(this.malId).then(function (malSeries) {
       self.malSeries = malSeries;
 
       malSeries.getEpisodes().then(_malEpisodes => {
-        self.aniDbEpisodes = [];
+        self.malEpisodes = [];
         async.eachSeries(_malEpisodes, (_malEpisode, next) => {
           _malEpisode.getInformation().then(malEpisode => {
-            self.aniDbEpisodes.push(malEpisode);
+            self.malEpisodes.push(malEpisode);
             next();
           });
         }, () => {
-          const cacheObject = {malSeries: self.malSeries, malEpisodes: self.aniDbEpisodes};
+          const cacheObject = {malSeries: self.malSeries, malEpisodes: self.malEpisodes};
           //noinspection ES6ModulesDependencies,NodeModulesDependencies
           fs.writeFileSync(cacheFile, JSON.stringify(cacheObject));
-          done = true;
+          callback();
         });
       });
     });
-
-    // Wait to be done
-    deasync.loopWhile(() => !done);
   }
 
-  getAniDbData() {
+  getAniDbData(callback) {
     const cacheFile = 'cache/anidb-' + this.aniDbId + '.json';
     const cache = {};
-    let done = false;
 
     if (fs.existsSync(cacheFile)) {
       const stat = fs.statSync(cacheFile);
@@ -92,39 +92,39 @@ class Anime {
       const yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000));
       if (mtime > yesterday) {
         cache.result = require('../' + cacheFile);
-        done = true;
+        //noinspection JSUnresolvedVariable
+        this.aniDbAnime = cache.result.anime;
+        //noinspection JSUnresolvedVariable
+        this.aniDbEpisodes = cache.result.anime.episodes[0].episode;
+        callback();
+        return;
       }
     }
 
-    if (!done) {
-      console.log('Fetching series from AniDB with ID ' + this.aniDbId);
+    console.log('Fetching series from AniDB with ID ' + this.aniDbId);
 
-      const aniDbUrl = 'http://api.anidb.net:9001/httpapi?request=anime&client=animdl&clientver=1&protover=1&aid=' +
-        this.aniDbId;
-      request({uri: aniDbUrl, gzip: true}, (error, response, body) => {
-        parseString(body, function (error, result) {
-          cache.result = result;
-          //noinspection ES6ModulesDependencies,NodeModulesDependencies
-          fs.writeFileSync(cacheFile, JSON.stringify(result));
-          done = true;
-        });
+    const self = this;
+    const aniDbUrl = 'http://api.anidb.net:9001/httpapi?request=anime&client=animdl&clientver=1&protover=1&aid=' +
+      this.aniDbId;
+
+    request({uri: aniDbUrl, gzip: true}, (error, response, body) => {
+      parseString(body, function (error, result) {
+        cache.result = result;
+        //noinspection ES6ModulesDependencies,NodeModulesDependencies
+        fs.writeFileSync(cacheFile, JSON.stringify(result));
+        //noinspection JSUnresolvedVariable
+        self.aniDbAnime = cache.result.anime;
+        //noinspection JSUnresolvedVariable
+        self.aniDbEpisodes = cache.result.anime.episodes[0].episode;
+        callback();
       });
-    }
-
-    // Wait to be done
-    deasync.loopWhile(() => !done);
-
-    //noinspection JSUnresolvedVariable
-    this.aniDbAnime = cache.result.anime;
-    //noinspection JSUnresolvedVariable
-    this.aniDbEpisodes = cache.result.anime.episodes[0].episode;
+    });
   }
 
-  getProviderData() {
-    let done;
+  getProviderData(callback) {
     const self = this;
 
-    this.providerEpisodeRanges.forEach(function (providerEpisodeRange) {
+    async.eachSeries(this.providerEpisodeRanges, (providerEpisodeRange, next) => {
       let isSpecial = false;
       let start = providerEpisodeRange.start;
       let proceed = true;
@@ -157,8 +157,6 @@ class Anime {
             //noinspection JSUnresolvedVariable
             throw new Error('Unrecognised provider: ' + providerEpisodeRange.provider);
         }
-
-        done = false;
 
         //noinspection JSUnresolvedVariable
         provider.getEpisodes(self, providerEpisodeRange.providerId, (providerEpisodes) => {
@@ -201,10 +199,18 @@ class Anime {
               throw new Error('Could not match provider episode to AniDB');
             }
 
+            let malEpisode = null;
+            for (let i = 0; i < self.malEpisodes.length; i++) {
+              if (self.malEpisodes[i].number === providerEpisode.number) {
+                malEpisode = self.malEpisodes[i];
+                break;
+              }
+            }
+
             self.episodes.push(new Episode(
               self,
               aniDbEpisode,
-              null,
+              malEpisode,
               provider,
               providerEpisode,
               isSpecial,
@@ -212,32 +218,11 @@ class Anime {
               providerEpisode.number
             ));
           }
-
-          done = true;
         });
       }
 
-      // Wait to be done
-      deasync.loopWhile(() => !done);
-    });
-
-    /* this.provider.getEpisodes(this, (providerEpisodeRanges) => {
-     self.episodes = [];
-     for (var i = 0; i < providerEpisodeRanges.length; i++) {
-     var providerEpisode = providerEpisodeRanges[i];
-     var aniDbEpisode = null;
-     for (var j = 0; j < this.aniDbEpisodes.length; j++) {
-     //noinspection JSUnresolvedVariable
-     var episodeNumber = this.aniDbEpisodes[j].epno[0]['_'];
-     if (episodeNumber == providerEpisode.number) {
-     aniDbEpisode = this.aniDbEpisodes[j];
-     break;
-     }
-     }
-     self.episodes.push(new Episode(this, aniDbEpisode, providerEpisode, providerEpisode.number));
-     }
-     done = true;
-     }); */
+      next();
+    }, callback);
   }
 
   isMovie() {
