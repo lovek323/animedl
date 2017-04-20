@@ -102,8 +102,8 @@ const runSeries = function (requestedSeries, nextSeries) {
   /** @type {SeriesConfig[]} */
   const seriesConfigs = [];
   for (let i = 0; i < data.series.length; i++) {
-    if (data[i].aniDbId === aniDbId) {
-      seriesConfigs.push(SeriesConfig.fromData(data[i]));
+    if (data.series[i].aniDbId === aniDbId) {
+      seriesConfigs.push(SeriesConfig.fromData(data.series[i]));
       break;
     }
   }
