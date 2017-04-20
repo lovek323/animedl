@@ -108,7 +108,20 @@ const runSeries = function (requestedSeries, nextSeries) {
     }
   }
   if (seriesConfigs.length === 0) {
-    throw new Error('Could not find anime with aniDB ID ' + aniDbId);
+    const franchises = fs.readdirSync('./franchises');
+    for (let i = 0; i < franchises.length; i++) {
+      const franchise = require('./franchises/' + franchises[i]);
+      for (let j = 0; j < franchise.length; j++) {
+        if (franchise[j].aniDbId === aniDbId) {
+          seriesConfigs.push(SeriesConfig.fromData(franchise[j]));
+          break;
+        }
+      }
+    }
+
+    if (seriesConfigs.length === 0) {
+      throw new Error('Could not find anime with aniDB ID ' + aniDbId);
+    }
   }
 
   //noinspection JSUnresolvedFunction

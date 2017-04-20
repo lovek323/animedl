@@ -106,7 +106,7 @@ class ProviderEpisode {
    * @param {int} start
    */
   constructor(number, start) {
-    this.number = number - start;
+    this.number = number - start + 1;
   }
 
   getVideo(callback) {
@@ -123,7 +123,6 @@ class _9AnimeProvider extends Provider {
   getEpisodes(anime, seriesConfig, providerConfig, callback) {
     const episodes = [];
 
-    //noinspection JSUnresolvedFunction
     console.log('Fetching series from 9anime.to (' + providerConfig.providerId + '): ' + anime.getTitle());
 
     utils.cachedRequest('http://9anime.to/watch/_.' + providerConfig.providerId, (error, response, body) => {
@@ -157,7 +156,28 @@ class _9AnimeProvider extends Provider {
             new _9AnimeProviderEpisode(_9AnimeEpisodeNumber, providerConfig.providerStart, _9AnimeEpisodeId, url)
           );
           nextEpisode();
-        }, () => callback(episodes));
+        }, () => {
+          const sorted = [];
+          for (let i = 0; i < episodes.length; i++) {
+            sorted.push(episodes[i]);
+          }
+          sorted.sort(
+            /**
+             * @param {ProviderEpisode} episode1
+             * @param {ProviderEpisode} episode2
+             * @return int
+             */
+            (episode1, episode2) => {
+              if (episode1.number < episode2.number) {
+                return -1;
+              }
+              if (episode1.number > episode2.number) {
+                return 1;
+              }
+              return 0;
+            });
+            callback(sorted);
+        });
       }
     );
   };

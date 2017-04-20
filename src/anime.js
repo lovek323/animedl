@@ -115,12 +115,13 @@ class Anime {
           ? providerEpisodes.length - 1
           : this.providerConfig.providerEnd;
 
-        for (let providerEpisodeIndex = parseInt(this.providerConfig.providerStart);
-             providerEpisodeIndex <= providerEnd;
-             providerEpisodeIndex++
-        ) {
+        for (let providerEpisodeIndex = 0; providerEpisodeIndex <= providerEnd; providerEpisodeIndex++) {
           const providerEpisode = providerEpisodes[providerEpisodeIndex];
-          const providerEpisodeIndexFromStart = providerEpisodeIndex - self.providerConfig.providerStart;
+          if (this.providerConfig.providerStart > providerEpisode.number) {
+            continue;
+          }
+
+          const providerEpisodeIndexFromStart = providerEpisodeIndex - (self.providerConfig.providerStart - 1);
           let aniDbEpisode = null;
           let aniDbEpisodeNumber = null;
           for (let aniDbEpisodeIndex = aniDbStart.index;

@@ -58,9 +58,6 @@ class MalSeries {
 }
 
 class Data {
-  /** @type {object} */
-  franchises;
-
   /** @type {DataSeries[]} */
   series;
 }
