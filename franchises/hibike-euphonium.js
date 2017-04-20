@@ -4,7 +4,13 @@ module.exports = [
   // Hibike! Euphonium
   {
     aniDbId: 10889,
-    [constants.FORMAT_SUB]: { providerId: 'qkxn' },
+    [constants.FORMAT_SUB]: { providerId: 'qkxn', providerStart: 1, providerEnd: 13 },
+  },
+  // Hibike! Euphonium: Ready, Set, Monaka
+  {
+    aniDbId: 10889,
+    aniDbStart: 'S1',
+    [constants.FORMAT_SUB]: { providerId: 'qkxn', providerStart: 14, providerEnd: 14 },
   },
   // Hibike! Euphonium: The Everyday Life of Band
   {

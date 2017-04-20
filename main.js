@@ -159,15 +159,16 @@ const runFranchise = function (requestedFranchise, nextFranchise) {
   async.eachSeries(seriesConfigs,
     /**
      * @param {SeriesConfig} seriesConfig
+     * @param {function} nextSeriesConfig
      */
-    (seriesConfig) => {
+    (seriesConfig, nextSeriesConfig) => {
       Anime.get(seriesConfig, seriesConfig.providerSeriesList[format],
         /**
          * @param {Anime} anime
          */
-        anime => fetchSeries(anime, nextFranchise));
-    }
-  );
+        anime => fetchSeries(anime, nextSeriesConfig));
+    },
+    nextFranchise);
 };
 
 //noinspection JSUnresolvedFunction
