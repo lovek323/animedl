@@ -24,7 +24,7 @@ class ProviderConfig {
   static fromData(data, format) {
     const providerStart = typeof data.providerStart !== 'undefined' ? data.providerStart : 1;
     const providerEnd = typeof data.providerEnd !== 'undefined' ? data.providerStart : null;
-    const provider = typeof data.name !== 'undefined' ? data.name : constants.PROVIDER_9ANIME;
+    const provider = typeof data.providerName !== 'undefined' ? data.providerName : constants.PROVIDER_9ANIME;
     const providerId = data.providerId;
 
     return new ProviderConfig(

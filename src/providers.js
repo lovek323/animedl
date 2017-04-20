@@ -257,7 +257,4 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
   }
 }
 
-class KissanimeProvider extends Provider {
-}
-
-module.exports = { '9anime.to': new _9AnimeProvider(), 'kissanime.to': new KissanimeProvider() };
+module.exports = { '9anime.to': new _9AnimeProvider() };
