@@ -32,16 +32,9 @@ const sanitise = string => {
  * @param extension
  */
 const getTemporaryFilename = (anime, episode, extension) => {
-  let filename;
-  //noinspection JSUnresolvedFunction
   const sanitisedSeriesTitle = sanitise(anime.getTitle());
-  //noinspection JSUnresolvedFunction
-  if (anime.isMovie()) {
-    filename = 'cache/' + sanitisedSeriesTitle + '.' + extension;
-  } else {
-    filename = 'cache/' + sanitisedSeriesTitle + '_' + pad(2, episode.number, '0') + ' ' +
-      sanitise(episode.name) + '.' + extension;
-  }
+  const filename = 'cache/' + sanitisedSeriesTitle + '_' + pad(2, episode.number.number, '0') + ' ' +
+    sanitise(episode.name) + '.' + extension;
   return filename.replaceAll("'", '_');
 };
 

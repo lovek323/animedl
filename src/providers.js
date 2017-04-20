@@ -1,27 +1,23 @@
-const Episode = require('./episode.js');
 const ProgressBar = require('progress');
 
 const async = require('async');
 const cheerio = require('cheerio');
 const debug = require('debug')('animedl');
 const debugTrace = require('debug')('animedl-trace');
-const exec = require('child_process').exec;
 const fs = require('fs');
 const numeral = require('numeral');
 const progress = require('request-progress');
-const shellescape = require('shell-escape');
-const syncrequest = require('sync-request');
 const request = require('request');
 const utils = require('./utils.js');
 
 class Provider {
   /**
    * @param {Anime} anime
-   * @param providerId
+   * @param {SeriesConfig} seriesConfig
+   * @param {ProviderConfig} providerConfig
    * @param callback
    */
-  getEpisodes(anime, providerId, callback) {
-    callback([]);
+  getEpisodes(anime, seriesConfig, providerConfig, callback) {
   }
 
   /**
@@ -30,64 +26,19 @@ class Provider {
    * @param callback
    */
   downloadEpisode(anime, episode, callback) {
-    if (episode.fileExists()) {
-      this.writeMetadata(anime, episode, episode.getActualFilename(), callback);
+    const finalFilename = episode.getFinalFilename();
+
+    if (fs.existsSync(finalFilename)) {
+      callback();
       return;
     }
 
-    const finalFilename = episode.getFinalFilename();
-    const jpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
-
     episode.providerEpisode.getVideo(video => {
-      //noinspection JSUnresolvedFunction
-      if (anime.isMovie()) {
-        //noinspection JSUnresolvedFunction
-        console.log('Downloading ' + anime.getTitle() + ' (' + video.resolution + 'p) to ' + finalFilename);
-      } else {
-        //noinspection JSUnresolvedFunction
-        console.log('Downloading ' + anime.getTitle() + ' - ' + episode.number + ' - ' + episode.name + ' (' +
-          video.resolution + 'p) to ' + finalFilename);
-      }
+      console.log('Downloading ' + anime.getTitle() + ' - ' + episode.number.number + ' - ' + episode.name + ' (' +
+        video.resolution + 'p) to ' + finalFilename);
 
-      if (!fs.existsSync(jpgFilename)) {
-        //noinspection JSUnresolvedFunction
-        const response = syncrequest('GET', anime.imageUrl);
-        //noinspection JSUnresolvedVariable
-        const contentLength = parseInt(response.headers['content-length']);
-        //noinspection JSUnresolvedVariable
-        fs.writeFileSync(jpgFilename, response.body, 'binary');
-        const stat = fs.statSync(jpgFilename);
-        if (stat.size !== contentLength) {
-          throw new Error('Could not download JPG');
-        }
-      }
-
-      this.downloadAndWriteMetadata(anime, episode, video, callback);
-    });
-  }
-
-  /**
-   * @param {Anime} anime
-   * @param {Episode} episode
-   * @param video
-   * @param callback
-   */
-  downloadAndWriteMetadata(anime, episode, video, callback) {
-    const temporaryMp4Filename = utils.getTemporaryFilename(anime, episode, 'mp4');
-    if (!fs.existsSync(temporaryMp4Filename)) {
       this.downloadVideo(anime, episode, video, callback);
-    } else {
-      this.writeMetadata(anime, episode, temporaryMp4Filename, () => {
-          const is = fs.createReadStream(temporaryMp4Filename);
-          const os = fs.createWriteStream(episode.getFinalFilename());
-          is.pipe(os);
-          is.on('end', () => {
-            fs.unlinkSync(temporaryMp4Filename);
-          });
-          callback();
-        }
-      );
-    }
+    });
   }
 
   downloadVideo(anime, episode, video, callback) {
@@ -115,15 +66,7 @@ class Provider {
       } else {
         console.log('');
       }
-      self.writeMetadata(anime, episode, temporaryFilename, () => {
-        const is = fs.createReadStream(temporaryFilename);
-        const os = fs.createWriteStream(episode.getFinalFilename());
-        is.pipe(os);
-        is.on('end', () => {
-          fs.unlinkSync(temporaryFilename);
-        });
-        callback();
-      });
+      self.moveVideo(temporaryFilename, episode, callback);
     });
 
     //noinspection JSUnresolvedFunction
@@ -144,236 +87,46 @@ class Provider {
   }
 
   /**
-   * @param {Anime} anime
+   * @param {string} temporaryFilename
    * @param {Episode} episode
-   * @param filename
-   * @param callback
+   * @param {function} callback
    */
-  writeMetadata(anime, episode, filename, callback) {
-    const episodeSynopsis = episode.synopsis;
-    const genre = anime.genres[0];
-    let contentRating = '';
-
-    //noinspection JSUnresolvedVariable
-    switch (anime.classification) {
-      case 'G - All Ages':
-        contentRating = 'G';
-        break;
-      case 'PG-13 - Teens 13 or older':
-        contentRating = 'PG-13';
-        break;
-      case 'R - 17+ (violence & profanity)':
-      case 'R+ - Mild Nudity':
-        contentRating = 'R';
-        break;
-      case 'None':
-        contentRating = null;
-        break;
-      default:
-        //noinspection JSUnresolvedVariable
-        throw new Error('Unrecognised classification: ' + anime.classification);
-    }
-
-    const jpgFilename = utils.getTemporaryFilename(anime, episode, 'jpg');
-
-    let args = [
-      'AtomicParsley',
-      filename,
-      '--overWrite',
-      '--genre',
-      genre,
-      '--grouping',
-      anime.type
-    ];
-
-    if (anime.synopsis) {
-      let description = anime.synopsis;
-      if (description.length > 255) {
-        description = description.substr(0, 255);
-      }
-      args.push('--description', description);
-    }
-
-    if (episodeSynopsis) {
-      args.push('--longdesc', episodeSynopsis);
-    }
-
-    if (fs.existsSync(jpgFilename)) {
-      args.push('--artwork', jpgFilename);
-    }
-
-    if (contentRating !== null) {
-      args.push('--contentRating', contentRating);
-    }
-
-    if (episode.aired !== null) {
-      args.push('--year', episode.aired);
-    }
-
-    //noinspection JSUnresolvedFunction
-    if (anime.isMovie()) {
-      //noinspection JSUnresolvedFunction
-      args = args.concat([
-        '--stik',
-        'Movie',
-        '--title',
-        anime.getTitle(),
-      ]);
-    } else {
-      // Treat this as a TV series
-      //noinspection JSUnresolvedFunction
-      args = args.concat([
-        '--stik',
-        'TV Show',
-        '--title',
-        episode.name,
-        '--tracknum',
-        episode.number + '/' + anime.episodeCount,
-        '--TVShowName',
-        anime.getTitle(),
-        '--TVEpisodeNum',
-        episode.number,
-      ]);
-    }
-
-    debugTrace(args);
-
-    exec(shellescape(args), (error, stdout, stderr) => {
-      if (error) {
-        if (stderr.includes('could not be loaded')) {
-          fs.unlinkSync(jpgFilename);
-          console.log(jpgFilename + ' is not a valid JPEG');
-          process.exit(1);
-          return;
-        }
-        if (stdout.includes('APar_readX read failed')) {
-          fs.unlinkSync(filename);
-          console.log(filename + ' is not a valid MP4');
-          process.exit(1);
-          return;
-        }
-        process.stdout.write(error + '\n');
-        process.stdout.write(stdout + '\n');
-        process.stdout.write(stderr + '\n');
-        process.exit(1);
-        return;
-      }
-
-      args = ['perl', 'iTunMOVI-1.1.pl'];
-      anime.characters.forEach(character => {
-        if (character.actor === '' || character.language !== 'Japanese') {
-          // We are adding actors, not characters and Japanese voice actors not English dub actors
-          return;
-        }
-        const match = character.actor.match(/(.*), (.*)/);
-        let actor;
-        if (match === null) {
-          actor = character.actor;
-        } else {
-          actor = match[2] + ' ' + match[1];
-        }
-        args.push('--cast');
-        args.push(actor);
-      });
-      anime.staff.forEach(staff => {
-        const match = staff.name.match(/(.*), (.*)/);
-        let name;
-        if (match === null) {
-          // Handle single names like 'nano'
-          name = staff.name;
-        } else {
-          name = match[2] + ' ' + match[1];
-        }
-        staff.role.forEach(role => {
-          switch (role) {
-            case 'Assistant Producer':
-            case 'Producer':
-            case 'Executive Producer':
-              args.push('--producers');
-              args.push(name);
-              break;
-            case 'Director':
-              args.push('--directors');
-              args.push(name);
-              break;
-            case 'Screenplay':
-            case 'Script':
-            case 'Storyboard':
-              args.push('--screenwriters');
-              args.push(name);
-              break;
-            case 'ADR Director':
-            case 'Animation Director':
-            case 'Chief Animation Director':
-            case 'Episode Director':
-            case 'Sound Director':
-              args.push('--codirectors');
-              args.push(name);
-              break;
-            case '2nd Key Animation':
-            case 'Background Art':
-            case 'Character Design':
-            case 'Key Animation':
-            case 'Music':
-            case 'Series Composition':
-            case 'Original Character Design':
-            case 'Original Creator':
-            case 'Theme Song Arrangement':
-            case 'Theme Song Composition':
-            case 'Theme Song Lyrics':
-            case 'Theme Song Performance':
-              // Ignore these roles, they don't fit
-              break;
-            default:
-              throw new Error('Unrecognised staff role: ' + role);
-          }
-        });
-      });
-      anime.studios.forEach(studio => {
-        args.push('--studio');
-        args.push(studio);
-      });
-      args.push('--file');
-      args.push(filename);
-      args.push('--write');
-
-      debugTrace(args);
-      exec(shellescape(args), error => {
-        if (error) {
-          process.stdout.write(error + '\n');
-          process.exit(4);
-          return;
-        }
-        callback();
-      });
-    });
+  moveVideo(temporaryFilename, episode, callback) {
+    const is = fs.createReadStream(temporaryFilename);
+    const os = fs.createWriteStream(episode.getFinalFilename());
+    is.pipe(os);
+    is.on('end', () => fs.unlinkSync(temporaryFilename));
+    callback();
   }
-
 }
 
 class ProviderEpisode {
-  constructor(number) {
-    this.number = number;
+  /**
+   * @param {int} number
+   * @param {int} start
+   */
+  constructor(number, start) {
+    this.number = number - start;
   }
 
-  getVideo() {
+  getVideo(callback) {
   }
 }
 
 class _9AnimeProvider extends Provider {
-
   /**
    * @param {Anime} anime
-   * @param providerId
+   * @param {SeriesConfig} seriesConfig
+   * @param {ProviderConfig} providerConfig
    * @param callback
    */
-  getEpisodes(anime, providerId, callback) {
+  getEpisodes(anime, seriesConfig, providerConfig, callback) {
     const episodes = [];
 
     //noinspection JSUnresolvedFunction
-    console.log('Fetching series from 9anime.to (' + providerId + '): ' + anime.getTitle());
+    console.log('Fetching series from 9anime.to (' + providerConfig.providerId + '): ' + anime.getTitle());
 
-    utils.cachedRequest('http://9anime.to/watch/_.' + providerId, (error, response, body) => {
+    utils.cachedRequest('http://9anime.to/watch/_.' + providerConfig.providerId, (error, response, body) => {
         //noinspection JSUnresolvedFunction
         const $ = cheerio.load(body);
         const _9AnimeEpisodes = {};
@@ -398,8 +151,11 @@ class _9AnimeProvider extends Provider {
 
           debugTrace('Processing 9anime.to episode ' + _9AnimeEpisodeNumber);
 
-          const url = 'http://9anime.to/ajax/episode/info?id=' + _9AnimeEpisodeId + '&update=1&film=' + providerId;
-          episodes.push(new _9AnimeProviderEpisode(_9AnimeEpisodeNumber, _9AnimeEpisodeId, url));
+          const url = 'http://9anime.to/ajax/episode/info?id=' + _9AnimeEpisodeId + '&update=1&film='
+            + providerConfig.providerId;
+          episodes.push(
+            new _9AnimeProviderEpisode(_9AnimeEpisodeNumber, providerConfig.providerStart, _9AnimeEpisodeId, url)
+          );
           nextEpisode();
         }, () => callback(episodes));
       }
@@ -409,9 +165,8 @@ class _9AnimeProvider extends Provider {
 }
 
 class _9AnimeProviderEpisode extends ProviderEpisode {
-
-  constructor(number, id, url) {
-    super(number);
+  constructor(number, start, id, url) {
+    super(number, start);
 
     this.malId = id;
     this.url = url;
@@ -500,7 +255,6 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
       }
     );
   }
-
 }
 
 class KissanimeProvider extends Provider {
