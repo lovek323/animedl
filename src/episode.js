@@ -65,7 +65,7 @@ class Episode {
     return utils.sanitise(this.anime.getTitle());
   }
 
-  getPath() {
+  getYearSeasonPath() {
     let path = '';
 
     //noinspection JSUnresolvedVariable
@@ -107,23 +107,25 @@ class Episode {
   }
 
   getFinalFilename() {
-    const path = this.getPath();
+    const config = require('../config.json');
+    const yearSeasonPath = config.useYearSeasonDirectories ? this.getYearSeasonPath() : '';
     const sanitisedAnimeTitle = this.getFilenameSeriesTitle();
     const paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
     const sanitisedEpisodeName = utils.sanitise(this.name);
 
     //noinspection JSUnresolvedFunction
     if (this.anime.isMovie()) {
-      return config.moviesFinalDirectory + '/' + path + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' (' +
+      return config.moviesFinalDirectory + '/' + yearSeasonPath + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' (' +
         this.format + ').mp4';
     } else {
-      return config.tvFinalDirectory + '/' + path + sanitisedAnimeTitle + '/' + paddedEpisodeNumber + ' ' +
+      return config.tvFinalDirectory + '/' + yearSeasonPath + sanitisedAnimeTitle + '/' + paddedEpisodeNumber + ' ' +
         sanitisedEpisodeName + ' (' + this.format + ').mp4';
     }
   }
 
   getActualFilename() {
-    const path = this.getPath();
+    const config = require('../config.json');
+    const yearSeasonPath = config.useYearSeasonDirectories ? this.getYearSeasonPath() : '';
     const sanitisedAnimeTitle = this.getFilenameSeriesTitle();
     const paddedEpisodeNumber = (this.isSpecial ? 'S00E' : 'S01E') + pad(2, this.number, '0');
 
@@ -134,11 +136,11 @@ class Episode {
       pattern = config.moviesFinalDirectory + '/' + sanitisedAnimeTitle + '/' + sanitisedAnimeTitle + ' \\(' +
         this.format + '\\).mp4';
     } else {
-      if (!fs.existsSync(config.tvFinalDirectory + '/' + path + sanitisedAnimeTitle)) {
-        mkdirp(config.tvFinalDirectory + '/' + path + sanitisedAnimeTitle);
+      if (!fs.existsSync(config.tvFinalDirectory + '/' + yearSeasonPath + sanitisedAnimeTitle)) {
+        mkdirp(config.tvFinalDirectory + '/' + yearSeasonPath + sanitisedAnimeTitle);
       }
 
-      pattern = config.tvFinalDirectory + '/' + path + sanitisedAnimeTitle + '/' + paddedEpisodeNumber + '*\\(' +
+      pattern = config.tvFinalDirectory + '/' + yearSeasonPath + sanitisedAnimeTitle + '/' + paddedEpisodeNumber + '*\\(' +
         this.format + '\\).mp4';
     }
 

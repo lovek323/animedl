@@ -9,11 +9,20 @@ Create a `config.json`:
   "outputDirectory": "",
   "moviesFinalDirectory": "",
   "tvFinalDirectory": "",
+  "useYearSeasonDirectories": true,
   "series": [
     {
-      "id": "12345",
-      "_9AnimeTitle": "Test",
-      "kissanimeTitle": "Test"
+      "aniDbId": "10376",
+      "providerEpisodeRanges": [
+        {
+          "name": "Sword Art Online II",
+          "start": "1",
+          "malId": "21881",
+          "provider": "9anime.to",
+          "providerId": "6y0",
+          "format": "sub"
+        }
+      ]
     }
   ]
 }
@@ -29,6 +38,7 @@ npm install
 Run the tool:
 
 ```
+rm cache/*.mp4
 node main.js
 ```
 

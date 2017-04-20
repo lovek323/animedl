@@ -57,7 +57,7 @@ class Provider {
         //noinspection JSUnresolvedVariable
         fs.writeFileSync(jpgFilename, response.body, 'binary');
         const stat = fs.statSync(jpgFilename);
-        if (stat.size != contentLength) {
+        if (stat.size !== contentLength) {
           throw new Error('Could not download JPG');
         }
       }
@@ -78,7 +78,12 @@ class Provider {
       this.downloadVideo(anime, episode, video, callback);
     } else {
       this.writeMetadata(anime, episode, temporaryMp4Filename, () => {
-          fs.renameSync(temporaryMp4Filename, episode.getFinalFilename());
+          const is = fs.createReadStream(temporaryMp4Filename);
+          const os = fs.createWriteStream(episode.getFinalFilename());
+          is.pipe(os);
+          is.on('end', () => {
+            fs.unlinkSync(temporaryMp4Filename);
+          });
           callback();
         }
       );
@@ -111,13 +116,18 @@ class Provider {
         console.log('');
       }
       self.writeMetadata(anime, episode, temporaryFilename, () => {
-        fs.renameSync(temporaryFilename, episode.getFinalFilename());
+        const is = fs.createReadStream(temporaryFilename);
+        const os = fs.createWriteStream(episode.getFinalFilename());
+        is.pipe(os);
+        is.on('end', () => {
+          fs.unlinkSync(temporaryFilename);
+        });
         callback();
       });
     });
 
     //noinspection JSUnresolvedFunction
-    progress(request({url: video.url, method: 'GET', followAllRedirects: true}))
+    progress(request({ url: video.url, method: 'GET', followAllRedirects: true }))
       .on(
         'progress',
         state => bar.update(
@@ -242,9 +252,9 @@ class Provider {
           process.exit(1);
           return;
         }
-        process.stdout.write(error + "\n");
-        process.stdout.write(stdout + "\n");
-        process.stdout.write(stderr + "\n");
+        process.stdout.write(error + '\n');
+        process.stdout.write(stdout + '\n');
+        process.stdout.write(stderr + '\n');
         process.exit(1);
         return;
       }
@@ -330,7 +340,7 @@ class Provider {
       debugTrace(args);
       exec(shellescape(args), error => {
         if (error) {
-          process.stdout.write(error + "\n");
+          process.stdout.write(error + '\n');
           process.exit(4);
           return;
         }
@@ -364,10 +374,11 @@ class _9AnimeProvider extends Provider {
     console.log('Fetching series from 9anime.to (' + providerId + '): ' + anime.getTitle());
 
     utils.cachedRequest('http://9anime.to/watch/_.' + providerId, (error, response, body) => {
+        //noinspection JSUnresolvedFunction
         const $ = cheerio.load(body);
         const _9AnimeEpisodes = {};
-        $("ul.episodes a").each((index, element) => {
-          const id = $(element).data("id");
+        $('ul.episodes a').each((index, element) => {
+          const id = $(element).data('id');
           const name = $(element).text();
           if (typeof _9AnimeEpisodes[name] === 'undefined') {
             _9AnimeEpisodes[name] = [];
@@ -375,6 +386,7 @@ class _9AnimeProvider extends Provider {
           _9AnimeEpisodes[name].push(id);
         });
 
+        //noinspection JSUnresolvedFunction
         async.eachSeries(Object.keys(_9AnimeEpisodes), (_9AnimeEpisode, nextEpisode) => {
           const _9AnimeEpisodeId = _9AnimeEpisodes[_9AnimeEpisode][0];
           const _9AnimeEpisodeNumberMatch = _9AnimeEpisode.match(/^([0-9]+)/);
@@ -385,16 +397,6 @@ class _9AnimeProvider extends Provider {
           }
 
           debugTrace('Processing 9anime.to episode ' + _9AnimeEpisodeNumber);
-
-          /* if (new Episode(anime, null, _9AnimeEpisode, _9AnimeEpisodeNumber).fileExists()) {
-           if (anime.isMovie()) {
-           debug('Skipping ' + this.anime.getTitle());
-           } else {
-           debug('Skipping _9AnimeEpisode ' + _9AnimeEpisodeNumber);
-           }
-           nextEpisode();
-           return;
-           } */
 
           const url = 'http://9anime.to/ajax/episode/info?id=' + _9AnimeEpisodeId + '&update=1&film=' + providerId;
           episodes.push(new _9AnimeProviderEpisode(_9AnimeEpisodeNumber, _9AnimeEpisodeId, url));
@@ -491,7 +493,7 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
               }
             }
 
-            self.video = {url: bestLink, resolution: bestResolution};
+            self.video = { url: bestLink, resolution: bestResolution };
             callback(self.video);
           }
         );
@@ -504,4 +506,4 @@ class _9AnimeProviderEpisode extends ProviderEpisode {
 class KissanimeProvider extends Provider {
 }
 
-module.exports = {"9anime.to": new _9AnimeProvider(), "kissanime.to": new KissanimeProvider()};
+module.exports = { '9anime.to': new _9AnimeProvider(), 'kissanime.to': new KissanimeProvider() };

@@ -189,7 +189,7 @@ class Anime {
               }
               episodeNumber = parseInt(episodeNumber);
               episodeNumber -= start - 1;
-              if (episodeNumber == providerEpisode.number) {
+              if (episodeNumber === providerEpisode.number) {
                 aniDbEpisode = self.aniDbEpisodes[j];
                 break;
               }
